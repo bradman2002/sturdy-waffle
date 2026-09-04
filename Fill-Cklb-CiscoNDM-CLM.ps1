@@ -89,10 +89,10 @@ if (-not $OutputPath) {
 # ---------------------------------------------------------------------------
 
 Write-Host "Loading cklb:   $CklbPath"
-$cklb = Get-Content -Raw -Path $CklbPath | ConvertFrom-Json
+$cklb = Get-Content -Raw -Path $CklbPath -Encoding UTF8 | ConvertFrom-Json
 
 Write-Host "Loading config: $ConfigPath"
-$configText = Get-Content -Raw -Path $ConfigPath
+$configText = Get-Content -Raw -Path $ConfigPath -Encoding UTF8
 
 # ---------------------------------------------------------------------------
 # 2. Helpers - built entirely on the -match operator and String methods,
