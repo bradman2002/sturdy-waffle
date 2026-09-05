@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CKLB Auto-Fill — Cisco IOS Switch NDM</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #151b23;
+    --border: #2a3441;
+    --text: #d6dde5;
+    --dim: #7d8b9a;
+    --accent: #4a9eda;
+    --ok: #3fb950;
+    --open: #e5534b;
+    --mono: "SF Mono", "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding: 2rem 1.5rem 4rem;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+    letter-spacing: -0.01em;
+  }
+  .subtitle { color: var(--dim); font-size: 0.9rem; margin: 0 0 2rem; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1.25rem;
+  }
+  .card h2 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--dim);
+    margin: 0 0 0.9rem;
+    font-weight: 600;
+  }
+  .drop {
+    border: 1.5px dashed var(--border);
+    border-radius: 8px;
+    padding: 1.1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    font-size: 0.88rem;
+  }
+  .drop:hover, .drop.drag {
+    border-color: var(--accent);
+    background: rgba(74, 158, 218, 0.06);
+  }
+  .drop input { display: none; }
+  .filename {
+    margin-top: 0.6rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--accent);
+    word-break: break-all;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  button.run {
+    width: 100%;
+    background: var(--accent);
+    color: #06131f;
+    border: none;
+    border-radius: 8px;
+    padding: 0.85rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 0.5rem;
+    transition: filter 0.15s;
+  }
+  button.run:hover { filter: brightness(1.08); }
+  button.run:disabled { background: var(--border); color: var(--dim); cursor: not-allowed; }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin: 1.25rem 0;
+  }
+  .stat { text-align: center; }
+  .stat .n { font-size: 1.6rem; font-weight: 700; font-family: var(--mono); }
+  .stat .l { font-size: 0.72rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat.ok .n { color: var(--ok); }
+  .stat.open .n { color: var(--open); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+  th { text-align: left; color: var(--dim); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
+  td { padding: 0.55rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .vid { font-family: var(--mono); color: var(--accent); white-space: nowrap; }
+  .status { font-weight: 700; font-size: 0.72rem; text-transform: uppercase; white-space: nowrap; }
+  .status.na { color: var(--ok); }
+  .status.open { color: var(--open); }
+  .detail { color: var(--dim); font-size: 0.8rem; }
+  .download {
+    display: block;
+    width: 100%;
+    text-align: center;
+    background: var(--ok);
+    color: #06210c;
+    text-decoration: none;
+    border-radius: 8px;
+    padding: 0.85rem;
+    font-weight: 600;
+    margin-top: 1rem;
+  }
+  .note {
+    font-size: 0.78rem;
+    color: var(--dim);
+    line-height: 1.5;
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+  .hidden { display: none; }
+  .device-block { margin-bottom: 1.5rem; }
+  .device-block:last-child { margin-bottom: 0; }
+  .device-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.5rem;
+  }
+  .device-head h3 { margin: 0; font-size: 0.95rem; font-family: var(--mono); color: var(--text); }
+  .device-head .counts { font-size: 0.78rem; color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>CKLB Auto-Fill (Bulk)</h1>
+  <p class="subtitle">Cisco IOS Switch NDM STIG — one template checklist, any number of device configs, matched against 14 rule checks entirely in your browser. Nothing is uploaded anywhere.</p>
+
+  <div class="card">
+    <h2>1. Template .cklb (used as the starting point for every device)</h2>
+    <div class="drop" id="dropCklb">
+      <div>Click to choose, or drag a .cklb file here</div>
+      <div class="filename" id="nameCklb"></div>
+      <input type="file" id="fileCklb" accept=".cklb,application/json">
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Device running-configs (.txt) — one or many</h2>
+    <div class="drop" id="dropCfg">
+      <div>Click to choose, or drag one or more config text files here</div>
+      <div class="filename" id="nameCfg"></div>
+      <input type="file" id="fileCfg" accept=".txt,.cfg,.log,text/plain" multiple>
+    </div>
+  </div>
+
+  <button class="run" id="runBtn" disabled>Run checks</button>
+
+  <div id="results" class="hidden">
+    <div class="card">
+      <h2>Results</h2>
+      <div class="summary">
+        <div class="stat"><div class="n" id="statDevices">0</div><div class="l">Devices</div></div>
+        <div class="stat"><div class="n" id="statFilled">0</div><div class="l">Auto-filled / device</div></div>
+        <div class="stat ok"><div class="n" id="statNA">0</div><div class="l">Not a finding (total)</div></div>
+        <div class="stat open"><div class="n" id="statOpen">0</div><div class="l">Open (total)</div></div>
+      </div>
+      <div id="deviceTables"></div>
+      <a class="download hidden" id="downloadLink">Download filled .cklb files (.zip)</a>
+    </div>
+  </div>
+
+  <div class="note">
+    Covers CISC-ND-000010, 000160, 000470, 000490, 000550, 000570, 000580, 000590, 000600, 000610, 000620, 000720, 001030, 001150. Everything else in the cklb is left <code>not_reviewed</code> — those need log review, external server checks, or the Cisco support matrix. Always spot-check auto-filled results against the actual config before submitting. Each device's output file is named after its <code>hostname</code> line if found, otherwise after the config file's own name, and gets its own freshly generated checklist ID so none of the exported files collide with each other or the original template.
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  let cklbTemplateData = null;
+  let cklbTemplateText = null;
+  let configFiles = []; // [{name, text}]
+
+  // -------------------------------------------------------------------
+  // File pickers (click + drag/drop)
+  // -------------------------------------------------------------------
+  function wireDropSingle(dropId, inputId, nameId, onLoad) {
+    const drop = document.getElementById(dropId);
+    const input = document.getElementById(inputId);
+    const nameEl = document.getElementById(nameId);
+
+    drop.addEventListener("click", () => input.click());
+    input.addEventListener("change", (e) => {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("drag"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+    drop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      drop.classList.remove("drag");
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+
+    function handleFile(file) {
+      nameEl.textContent = file.name;
+      const reader = new FileReader();
+      reader.onload = (ev) => onLoad(ev.target.result, file.name);
+      reader.readAsText(file, "UTF-8");
+    }
+  }
+
+  function wireDropMulti(dropId, inputId, nameId, onLoad) {
+    const drop = document.getElementById(dropId);
+    const input = document.getElementById(inputId);
+    const nameEl = document.getElementById(nameId);
+
+    drop.addEventListener("click", () => input.click());
+    input.addEventListener("change", (e) => {
+      if (e.target.files.length) handleFiles(e.target.files);
+    });
+    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("drag"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+    drop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      drop.classList.remove("drag");
+      if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+    });
+
+    function handleFiles(fileList) {
+      const files = Array.from(fileList);
+      nameEl.textContent = files.length === 1 ? files[0].name : `${files.length} files selected`;
+      let remaining = files.length;
+      const loaded = [];
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          loaded.push({ name: file.name, text: ev.target.result });
+          remaining--;
+          if (remaining === 0) onLoad(loaded);
+        };
+        reader.readAsText(file, "UTF-8");
+      });
+    }
+  }
+
+  wireDropSingle("dropCklb", "fileCklb", "nameCklb", (text, fname) => {
+    try {
+      cklbTemplateData = JSON.parse(text);
+      cklbTemplateText = text;
+      checkReady();
+    } catch (err) {
+      alert("Could not parse that as JSON: " + err.message);
+      cklbTemplateData = null;
+    }
+  });
+
+  wireDropMulti("dropCfg", "fileCfg", "nameCfg", (files) => {
+    configFiles = files;
+    checkReady();
+  });
+
+  function checkReady() {
+    document.getElementById("runBtn").disabled = !(cklbTemplateData && configFiles.length);
+  }
+
+  // -------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------
+  function getCcPolicyBlock(cfg) {
+    const m = cfg.match(/^aaa common-criteria policy\s+\S+\s*\r?\n([\s\S]*?)(?=^!)/m);
+    return m ? m[1] : null;
+  }
+
+  function getDeviceName(cfg, fallback) {
+    const m = cfg.match(/^hostname\s+(\S+)/im);
+    return m ? m[1] : fallback;
+  }
+
+  function allMatches(text, re) {
+    // re must have the global flag
+    const out = [];
+    let m;
+    const r = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+    while ((m = r.exec(text)) !== null) {
+      out.push(m);
+      if (m.index === r.lastIndex) r.lastIndex++; // guard zero-length matches
+    }
+    return out;
+  }
+
+  // -------------------------------------------------------------------
+  // Rule checks — keyed by the cklb's stable "rule_version" (STIG ID)
+  // -------------------------------------------------------------------
+  const RULE_CHECKS = {
+
+    "CISC-ND-000010": (cfg) => {
+      const sessionLimit = /^\s*session-limit\s+\d+/im.test(cfg);
+      const vtyRestricted = /^\s*transport input\s+none/im.test(cfg);
+      const httpLimited = /^ip http max-connections\s+\d+/im.test(cfg);
+      if (sessionLimit || vtyRestricted || httpLimited) {
+        return { match: true, detail: "Found session-limit / restricted vty transport / ip http max-connections in config. Verify the actual number matches your org's approved limit." };
+      }
+      return { match: false, detail: "No session-limit, restricted 'transport input none' vty line, or 'ip http max-connections' found." };
+    },
+
+    "CISC-ND-000160": (cfg) => {
+      if (/^banner login/im.test(cfg)) {
+        return { match: true, detail: "'banner login' block is configured. Manually verify the banner text matches the required DoD notice-and-consent wording." };
+      }
+      return { match: false, detail: "No 'banner login' statement found in configuration." };
+    },
+
+    "CISC-ND-000470": (cfg) => {
+      const bad = ["boot network", "ip boot server", "ip bootp server", "ip dns server",
+        "ip identd", "ip finger", "ip http server", "ip rcmd rcp-enable",
+        "ip rcmd rsh-enable", "service config", "service finger",
+        "service tcp-small-servers", "service udp-small-servers"];
+      const found = bad.filter(svc => new RegExp("^\\s*" + svc + "\\s*$", "im").test(cfg));
+      if (found.length === 0) {
+        return { match: true, detail: "None of the unnecessary/non-secure services checked were found enabled." };
+      }
+      return { match: false, detail: "Unnecessary service(s) still enabled: " + found.join(", ") };
+    },
+
+    "CISC-ND-000490": (cfg) => {
+      const names = [...new Set(allMatches(cfg, /^username\s+(\S+)/im).map(m => m[1]))];
+      if (names.length === 1) {
+        return { match: true, detail: `Exactly one local account configured: ${names[0]}. Manually confirm it is documented as the account-of-last-resort.` };
+      }
+      return { match: false, detail: `Found ${names.length} local account(s): ${names.join(", ")}. Manual review required - multiple accounts may be justified but must be documented.` };
+    },
+
+    "CISC-ND-000550": (cfg, cc) => {
+      if (!cc) return { match: false, detail: "No 'aaa common-criteria policy' block found in configuration." };
+      const m = cc.match(/^\s*min-length\s+(\d+)/im);
+      if (m) {
+        const len = parseInt(m[1], 10);
+        return len >= 15
+          ? { match: true, detail: `Common-criteria policy min-length is ${len} (>= 15).` }
+          : { match: false, detail: `Common-criteria policy min-length is ${len} (< 15 required).` };
+      }
+      return { match: false, detail: "No 'min-length' setting found in the common-criteria policy block." };
+    },
+
+    "CISC-ND-000570": (cfg, cc) => ccCheck(cc, "upper-case"),
+    "CISC-ND-000580": (cfg, cc) => ccCheck(cc, "lower-case"),
+    "CISC-ND-000590": (cfg, cc) => ccCheck(cc, "numeric-count"),
+    "CISC-ND-000600": (cfg, cc) => ccCheck(cc, "special-case"),
+
+    "CISC-ND-000610": (cfg, cc) => {
+      if (!cc) return { match: false, detail: "No 'aaa common-criteria policy' block found in configuration." };
+      const m = cc.match(/^\s*char-changes\s+(\d+)/im);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        return n >= 8
+          ? { match: true, detail: `Common-criteria policy char-changes is ${n} (>= 8).` }
+          : { match: false, detail: `Common-criteria policy char-changes is ${n} (< 8 required).` };
+      }
+      return { match: false, detail: "No 'char-changes' setting found in the common-criteria policy block." };
+    },
+
+    "CISC-ND-000620": (cfg) => {
+      const encSvc = /^service password-encryption/im.test(cfg);
+      const encSecret = /^enable secret/im.test(cfg);
+      const weakEnable = /^enable password/im.test(cfg) && !/^enable password\s+secret/im.test(cfg);
+      if (encSvc && encSecret && !weakEnable) {
+        return { match: true, detail: "'service password-encryption' and 'enable secret' are configured; no weak 'enable password' found." };
+      }
+      const missing = [];
+      if (!encSvc) missing.push("service password-encryption");
+      if (!encSecret) missing.push("enable secret");
+      if (weakEnable) missing.push("weak 'enable password' is present");
+      return { match: false, detail: "Password encryption issue(s): " + missing.join("; ") };
+    },
+
+    "CISC-ND-000720": (cfg) => {
+      const timeouts = allMatches(cfg, /^\s*exec-timeout\s+(\d+)\s+(\d+)/im);
+      if (timeouts.length === 0) {
+        return { match: false, detail: "No 'exec-timeout' statements found on any line." };
+      }
+      const tooLong = [];
+      timeouts.forEach(t => {
+        const min = parseInt(t[1], 10), sec = parseInt(t[2], 10);
+        if (min > 5 || (min === 0 && sec === 0)) tooLong.push(`${min}:${sec}`);
+      });
+      if (tooLong.length === 0) {
+        return { match: true, detail: `All ${timeouts.length} exec-timeout statement(s) found are <= 5 minutes.` };
+      }
+      return { match: false, detail: `Found exec-timeout value(s) exceeding 5 minutes or disabled (0 0): ${tooLong.join(", ")}. Verify this applies to con/vty lines.` };
+    },
+
+    "CISC-ND-001030": (cfg) => {
+      const servers = allMatches(cfg, /^ntp server\s+(\S+)/im).map(m => m[1]);
+      if (servers.length >= 2) {
+        return { match: true, detail: `NTP server(s) configured: ${servers.join(", ")} (redundant sources present).` };
+      } else if (servers.length === 1) {
+        return { match: false, detail: `Only one NTP server configured (${servers[0]}); a redundant/secondary source is required.` };
+      }
+      return { match: false, detail: "No 'ntp server' statement found in configuration." };
+    },
+
+    "CISC-ND-001150": (cfg) => {
+      const authEnabled = /^ntp authenticate/im.test(cfg);
+      const hasKey = /^ntp authentication-key\s+\d+\s+(md5|sha1|sha2)/im.test(cfg);
+      const trustedKey = /^ntp trusted-key\s+\d+/im.test(cfg);
+      const serverKeyed = /^ntp server\s+\S+\s+key\s+\d+/im.test(cfg);
+      if (authEnabled && hasKey && trustedKey && serverKeyed) {
+        return { match: true, detail: "NTP authentication is fully configured (ntp authenticate + authentication-key + trusted-key + keyed server line)." };
+      }
+      const missing = [];
+      if (!authEnabled) missing.push("ntp authenticate");
+      if (!hasKey) missing.push("ntp authentication-key <id> md5/sha");
+      if (!trustedKey) missing.push("ntp trusted-key");
+      if (!serverKeyed) missing.push("ntp server ... key <id>");
+      return { match: false, detail: "NTP authentication incomplete - missing: " + missing.join(", ") };
+    }
+  };
+
+  function ccCheck(cc, keyword) {
+    if (!cc) return { match: false, detail: "No 'aaa common-criteria policy' block found in configuration." };
+    const m = cc.match(new RegExp("^\\s*" + keyword + "\\s+(\\d+)", "im"));
+    if (m && parseInt(m[1], 10) >= 1) {
+      return { match: true, detail: `Common-criteria policy requires ${keyword} ${m[1]} character(s).` };
+    }
+    return { match: false, detail: `No '${keyword}' requirement (>=1) found in the common-criteria policy block.` };
+  }
+
+  // -------------------------------------------------------------------
+  // Run — process every config against a fresh copy of the template
+  // -------------------------------------------------------------------
+  document.getElementById("runBtn").addEventListener("click", () => {
+    const deviceResults = [];
+    let grandNA = 0, grandOpen = 0, grandFilled = 0;
+
+    configFiles.forEach(cf => {
+      const configText = cf.text;
+      const ccBlock = getCcPolicyBlock(configText);
+      const fallbackName = cf.name.replace(/\.[^.]+$/, "");
+      const deviceName = getDeviceName(configText, fallbackName);
+
+      // Fresh deep copy of the template for every device
+      const cklb = JSON.parse(cklbTemplateText);
+
+      let filled = 0, na = 0, open = 0;
+      const rows = [];
+
+      (cklb.stigs || []).forEach(stig => {
+        (stig.rules || []).forEach(rule => {
+          const key = rule.rule_version;
+          const check = RULE_CHECKS[key];
+          if (!check) return;
+
+          let result;
+          try {
+            result = check(configText, ccBlock);
+          } catch (err) {
+            console.warn("Check failed for", key, err);
+            return;
+          }
+          if (!result) return;
+
+          rule.status = result.match ? "not_a_finding" : "open";
+          rule.finding_details = result.detail;
+          rule.comments = "Auto-filled by Cklb-AutoFill.html on " + new Date().toISOString().slice(0, 16).replace("T", " ") + " - verify before submitting.";
+
+          filled++;
+          result.match ? na++ : open++;
+          rows.push({ vid: rule.group_id, match: result.match, detail: result.detail });
+        });
+      });
+
+      // Fresh checklist ID per device - avoids collisions with the
+      // template and with every other device's exported file.
+      if ("id" in cklb) {
+        cklb.id = (crypto.randomUUID ? crypto.randomUUID() : fallbackUuid());
+      }
+
+      grandFilled += filled;
+      grandNA += na;
+      grandOpen += open;
+
+      deviceResults.push({
+        deviceName,
+        outputName: deviceName + "_filled.cklb",
+        filled, na, open,
+        rows,
+        cklbJson: JSON.stringify(cklb, null, 2)
+      });
+    });
+
+    renderResults(deviceResults, grandFilled, grandNA, grandOpen);
+    prepareDownload(deviceResults);
+  });
+
+  function fallbackUuid() {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  function renderResults(deviceResults, grandFilled, grandNA, grandOpen) {
+    document.getElementById("results").classList.remove("hidden");
+    document.getElementById("statDevices").textContent = deviceResults.length;
+    const avgFilled = deviceResults.length ? Math.round(grandFilled / deviceResults.length) : 0;
+    document.getElementById("statFilled").textContent = avgFilled;
+    document.getElementById("statNA").textContent = grandNA;
+    document.getElementById("statOpen").textContent = grandOpen;
+
+    const container = document.getElementById("deviceTables");
+    container.innerHTML = "";
+
+    deviceResults.forEach(dev => {
+      const block = document.createElement("div");
+      block.className = "device-block";
+
+      const head = document.createElement("div");
+      head.className = "device-head";
+      head.innerHTML = `<h3>${escapeHtml(dev.deviceName)}</h3><span class="counts">${dev.na} not a finding · ${dev.open} open</span>`;
+      block.appendChild(head);
+
+      const table = document.createElement("table");
+      const tbody = document.createElement("tbody");
+      table.innerHTML = `<thead><tr><th>V-ID</th><th>Status</th><th>Detail</th></tr></thead>`;
+      dev.rows.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="vid">${r.vid}</td>
+          <td class="status ${r.match ? "na" : "open"}">${r.match ? "Not a Finding" : "Open"}</td>
+          <td class="detail">${escapeHtml(r.detail)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      block.appendChild(table);
+      container.appendChild(block);
+    });
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // -------------------------------------------------------------------
+  // Minimal ZIP writer (store/no-compression) — no external library, so
+  // this stays fully offline-capable. Produces a standard PK zip that
+  // Windows Explorer / 7-Zip / unzip all read fine.
+  // -------------------------------------------------------------------
+  const CRC_TABLE = (() => {
+    const table = [];
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+
+  function crc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function writeU32(arr, off, val) { arr[off]=val&255; arr[off+1]=(val>>>8)&255; arr[off+2]=(val>>>16)&255; arr[off+3]=(val>>>24)&255; }
+  function writeU16(arr, off, val) { arr[off]=val&255; arr[off+1]=(val>>>8)&255; }
+
+  function makeZip(files) {
+    // files: [{name: string, data: Uint8Array}]
+    const now = new Date();
+    const time = ((now.getHours() & 31) << 11) | ((now.getMinutes() & 63) << 5) | ((now.getSeconds() >> 1) & 31);
+    const dosDate = (((now.getFullYear() - 1980) & 127) << 9) | (((now.getMonth() + 1) & 15) << 5) | (now.getDate() & 31);
+
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+
+    files.forEach(f => {
+      const nameBytes = new TextEncoder().encode(f.name);
+      const data = f.data;
+      const crc = crc32(data);
+      const size = data.length;
+
+      const local = new Uint8Array(30 + nameBytes.length);
+      writeU32(local, 0, 0x04034b50);
+      writeU16(local, 4, 20);
+      writeU16(local, 6, 0);
+      writeU16(local, 8, 0);
+      writeU16(local, 10, time);
+      writeU16(local, 12, dosDate);
+      writeU32(local, 14, crc);
+      writeU32(local, 18, size);
+      writeU32(local, 22, size);
+      writeU16(local, 26, nameBytes.length);
+      writeU16(local, 28, 0);
+      local.set(nameBytes, 30);
+      localParts.push(local, data);
+
+      const central = new Uint8Array(46 + nameBytes.length);
+      writeU32(central, 0, 0x02014b50);
+      writeU16(central, 4, 20);
+      writeU16(central, 6, 20);
+      writeU16(central, 8, 0);
+      writeU16(central, 10, 0);
+      writeU16(central, 12, time);
+      writeU16(central, 14, dosDate);
+      writeU32(central, 16, crc);
+      writeU32(central, 20, size);
+      writeU32(central, 24, size);
+      writeU16(central, 28, nameBytes.length);
+      writeU32(central, 42, offset);
+      central.set(nameBytes, 46);
+      centralParts.push(central);
+
+      offset += local.length + data.length;
+    });
+
+    const centralSize = centralParts.reduce((a, b) => a + b.length, 0);
+    const centralOffset = offset;
+    const eocd = new Uint8Array(22);
+    writeU32(eocd, 0, 0x06054b50);
+    writeU16(eocd, 8, files.length);
+    writeU16(eocd, 10, files.length);
+    writeU32(eocd, 12, centralSize);
+    writeU32(eocd, 16, centralOffset);
+
+    const allParts = [...localParts, ...centralParts, eocd];
+    const total = allParts.reduce((a, b) => a + b.length, 0);
+    const out = new Uint8Array(total);
+    let pos = 0;
+    allParts.forEach(p => { out.set(p, pos); pos += p.length; });
+    return out;
+  }
+
+  function prepareDownload(deviceResults) {
+    const link = document.getElementById("downloadLink");
+
+    if (deviceResults.length === 1) {
+      // Single device - just download the .cklb directly, no zip needed.
+      const blob = new Blob([deviceResults[0].cklbJson], { type: "application/json" });
+      link.href = URL.createObjectURL(blob);
+      link.download = deviceResults[0].outputName;
+      link.textContent = "Download " + deviceResults[0].outputName;
+    } else {
+      const zipFiles = deviceResults.map(d => ({
+        name: d.outputName,
+        data: new TextEncoder().encode(d.cklbJson)
+      }));
+      const zipBytes = makeZip(zipFiles);
+      const blob = new Blob([zipBytes], { type: "application/zip" });
+      link.href = URL.createObjectURL(blob);
+      link.download = "filled_cklbs.zip";
+      link.textContent = `Download ${deviceResults.length} filled .cklb files (.zip)`;
+    }
+    link.classList.remove("hidden");
+  }
+})();
+</script>
+</body>
+</html>
