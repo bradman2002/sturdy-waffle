@@ -2,16 +2,16 @@
 .SYNOPSIS
     Auto-fills the "easy" checks in a Cisco IOS Switch NDM .cklb using a
     device running-config, and saves a new .cklb with the results.
- 
+
 .DESCRIPTION
     Double-click friendly: right-click this file -> "Run with PowerShell".
     If you don't pass -CklbPath / -ConfigPath / -OutputPath on the command
     line, it will pop up file-picker dialogs instead.
- 
+
     Covers 14 rules from the Cisco IOS Switch NDM STIG (matched by the
     stable "rule_version" / STIG ID field, e.g. CISC-ND-000550, so it keeps
     working even if Cisco/DISA bump the SV-xxxxxx revision number later):
- 
+
       CISC-ND-000010  Concurrent session limit (vty/http)
       CISC-ND-000160  Login banner present
       CISC-ND-000470  Unnecessary services disabled
@@ -26,100 +26,161 @@
       CISC-ND-000720  exec-timeout <= 5 min on con/vty lines
       CISC-ND-001030  NTP server(s) configured
       CISC-ND-001150  NTP authentication configured
- 
+
     Every other rule in the cklb (audit logging, AAA server, cert auth,
     IOS version support, etc.) is intentionally left "not_reviewed" because
     those genuinely need a human to check logs, external servers, or the
     Cisco support matrix - trying to regex those reliably would just create
     false confidence.
- 
+
     ALWAYS spot-check the auto-filled results against the actual config
     before you submit the cklb. This is a time-saver, not a substitute for
     review.
- 
+
 .PARAMETER CklbPath
     Path to the input .cklb file. If omitted, a file picker opens.
- 
+
 .PARAMETER ConfigPath
     Path to the plain-text device config ("show running-config" output).
     If omitted, a file picker opens.
- 
+
 .PARAMETER OutputPath
     Path to write the updated .cklb. If omitted, a save-file dialog opens,
     defaulting to "<original name>_filled.cklb" next to the input file.
 #>
- 
+
+<#
+.SYNOPSIS
+    Auto-fills the "easy" checks in a Cisco IOS Switch NDM .cklb for one or
+    many devices at once, using one blank/template cklb plus each device's
+    running-config, and saves a separate filled .cklb per device.
+
+.DESCRIPTION
+    Double-click friendly: right-click this file -> "Run with PowerShell".
+    If you don't pass parameters, it prompts with file/folder dialogs:
+      1. Pick ONE template .cklb (used as the starting point for every device)
+      2. Pick ONE OR MORE device config text files (multi-select in the dialog)
+      3. Pick an output folder - one "<name>_filled.cklb" is written per device
+
+    Each output file is named after the device's "hostname" line in its
+    config if one is found, otherwise after the config file's own name.
+
+    Covers 14 rules from the Cisco IOS Switch NDM STIG (matched by the
+    stable "rule_version" / STIG ID field, e.g. CISC-ND-000550, so it keeps
+    working even if Cisco/DISA bump the SV-xxxxxx revision number later):
+
+      CISC-ND-000010  Concurrent session limit (vty/http)
+      CISC-ND-000160  Login banner present
+      CISC-ND-000470  Unnecessary services disabled
+      CISC-ND-000490  Single local account (heuristic - verify manually)
+      CISC-ND-000550  Password min-length >= 15
+      CISC-ND-000570  Password upper-case >= 1
+      CISC-ND-000580  Password lower-case >= 1
+      CISC-ND-000590  Password numeric-count >= 1
+      CISC-ND-000600  Password special-case >= 1
+      CISC-ND-000610  Password char-changes >= 8
+      CISC-ND-000620  Passwords encrypted (service password-encryption / enable secret)
+      CISC-ND-000720  exec-timeout <= 5 min on con/vty lines
+      CISC-ND-001030  NTP server(s) configured
+      CISC-ND-001150  NTP authentication configured
+
+    Every other rule in the cklb (audit logging, AAA server, cert auth,
+    IOS version support, etc.) is intentionally left "not_reviewed" because
+    those genuinely need a human to check logs, external servers, or the
+    Cisco support matrix - trying to regex those reliably would just create
+    false confidence.
+
+    ALWAYS spot-check the auto-filled results against the actual config
+    before you submit each cklb. This is a time-saver, not a substitute for
+    review.
+
+.PARAMETER CklbTemplatePath
+    Path to the template .cklb file used as the starting point for every
+    device. If omitted, a file picker opens.
+
+.PARAMETER ConfigPaths
+    One or more paths to plain-text device configs ("show running-config"
+    output). If omitted, a multi-select file picker opens. Can also be a
+    single folder path, in which case every .txt/.cfg/.log file in it is used.
+
+.PARAMETER OutputFolder
+    Folder to write the filled .cklb files into (one per config). If
+    omitted, a folder picker opens.
+#>
+
 [CmdletBinding()]
 param(
-    [string]$CklbPath,
-    [string]$ConfigPath,
-    [string]$OutputPath
+    [string]$CklbTemplatePath,
+    [string[]]$ConfigPaths,
+    [string]$OutputFolder
 )
- 
+
 $ErrorActionPreference = "Stop"
- 
+
 function Pause-Exit {
     param([int]$Code = 0)
     Write-Host ""
     Read-Host "Press Enter to close"
     exit $Code
 }
- 
+
 # ---------------------------------------------------------------------------
-# 0. GUI file pickers (so this can be run by double-click / right-click)
+# 0. GUI pickers (so this can be run by double-click / right-click)
 # ---------------------------------------------------------------------------
- 
+
 Add-Type -AssemblyName System.Windows.Forms | Out-Null
- 
-if (-not $CklbPath) {
+
+if (-not $CklbTemplatePath) {
     $dlg = New-Object System.Windows.Forms.OpenFileDialog
-    $dlg.Title  = "Select the .cklb file to fill in"
+    $dlg.Title  = "Select the template .cklb file"
     $dlg.Filter = "CKLB files (*.cklb)|*.cklb|All files (*.*)|*.*"
     if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
         Write-Host "No cklb file selected. Exiting."
         Pause-Exit 1
     }
-    $CklbPath = $dlg.FileName
+    $CklbTemplatePath = $dlg.FileName
 }
- 
-if (-not $ConfigPath) {
+
+if (-not $ConfigPaths -or $ConfigPaths.Count -eq 0) {
     $dlg = New-Object System.Windows.Forms.OpenFileDialog
-    $dlg.Title  = "Select the device running-config text file"
-    $dlg.Filter = "Text files (*.txt,*.cfg,*.log)|*.txt;*.cfg;*.log|All files (*.*)|*.*"
+    $dlg.Title       = "Select one or more device config files"
+    $dlg.Filter      = "Text files (*.txt,*.cfg,*.log)|*.txt;*.cfg;*.log|All files (*.*)|*.*"
+    $dlg.Multiselect = $true
     if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
-        Write-Host "No config file selected. Exiting."
+        Write-Host "No config file(s) selected. Exiting."
         Pause-Exit 1
     }
-    $ConfigPath = $dlg.FileName
+    $ConfigPaths = $dlg.FileNames
+} elseif ($ConfigPaths.Count -eq 1 -and (Test-Path $ConfigPaths[0] -PathType Container)) {
+    # A single folder was passed - expand it to every config file inside.
+    $ConfigPaths = Get-ChildItem -Path $ConfigPaths[0] -Include *.txt, *.cfg, *.log -File -Recurse | Select-Object -ExpandProperty FullName
 }
- 
-if (-not $OutputPath) {
-    $dlg = New-Object System.Windows.Forms.SaveFileDialog
-    $dlg.Title  = "Save filled cklb as..."
-    $dlg.Filter = "CKLB files (*.cklb)|*.cklb|All files (*.*)|*.*"
-    $dlg.FileName = [System.IO.Path]::GetFileNameWithoutExtension($CklbPath) + "_filled.cklb"
-    $dlg.InitialDirectory = [System.IO.Path]::GetDirectoryName($CklbPath)
+
+if (-not $OutputFolder) {
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = "Select a folder to save the filled cklb files into"
     if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
-        Write-Host "No output path chosen. Exiting."
+        Write-Host "No output folder chosen. Exiting."
         Pause-Exit 1
     }
-    $OutputPath = $dlg.FileName
+    $OutputFolder = $dlg.SelectedPath
 }
- 
+
+if (-not (Test-Path $OutputFolder)) {
+    New-Item -ItemType Directory -Path $OutputFolder | Out-Null
+}
+
+Write-Host "Template cklb: $CklbTemplatePath"
+Write-Host "Devices to process: $($ConfigPaths.Count)"
+Write-Host "Output folder: $OutputFolder"
+Write-Host ""
+
+$cklbTemplateText = Get-Content -Raw -Path $CklbTemplatePath -Encoding UTF8
+
 # ---------------------------------------------------------------------------
-# 1. Load inputs
+# 1. Helpers
 # ---------------------------------------------------------------------------
- 
-Write-Host "Loading cklb:   $CklbPath"
-$cklb = Get-Content -Raw -Path $CklbPath -Encoding UTF8 | ConvertFrom-Json
- 
-Write-Host "Loading config: $ConfigPath"
-$configText = Get-Content -Raw -Path $ConfigPath -Encoding UTF8
- 
-# ---------------------------------------------------------------------------
-# 2. Helpers
-# ---------------------------------------------------------------------------
- 
+
 function Get-CcPolicyBlock {
     # Pulls the body of the first "aaa common-criteria policy <name>" block
     # out of the config (Cisco prints its settings as indented lines below
@@ -129,21 +190,22 @@ function Get-CcPolicyBlock {
     if ($m.Success) { return $m.Groups[1].Value }
     return $null
 }
-$ccPolicyBlock = Get-CcPolicyBlock -Config $configText
- 
-function Test-ServiceDisabled {
-    # Returns $true if the "enabled" form of a service line is NOT present
-    # (i.e. it's either explicitly "no ..." or simply absent).
-    param([string]$Config, [string]$ServiceLine)
-    -not [regex]::IsMatch($Config, "(?im)^\s*$([regex]::Escape($ServiceLine))\s*$")
+
+function Get-DeviceName {
+    # Names the output file after the device's "hostname" line if present,
+    # otherwise falls back to the config file's own base name.
+    param([string]$Config, [string]$FallbackName)
+    $m = [regex]::Match($Config, '(?im)^hostname\s+(\S+)')
+    if ($m.Success) { return $m.Groups[1].Value }
+    return $FallbackName
 }
- 
+
 # ---------------------------------------------------------------------------
-# 3. Rule checks, keyed by the cklb's stable "rule_version" (STIG ID) field
+# 2. Rule checks, keyed by the cklb's stable "rule_version" (STIG ID) field
 # ---------------------------------------------------------------------------
- 
+
 $RuleChecks = @{
- 
+
     "CISC-ND-000010" = {
         param($cfg)
         $sessionLimit = [regex]::IsMatch($cfg, '(?im)^\s*session-limit\s+\d+')
@@ -154,7 +216,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "No session-limit, restricted 'transport input none' vty line, or 'ip http max-connections' found." }
     }
- 
+
     "CISC-ND-000160" = {
         param($cfg)
         if ($cfg -match '(?im)^banner login') {
@@ -162,7 +224,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "No 'banner login' statement found in configuration." }
     }
- 
+
     "CISC-ND-000470" = {
         param($cfg)
         $badServices = @(
@@ -182,7 +244,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "Unnecessary service(s) still enabled: $($found -join ', ')" }
     }
- 
+
     "CISC-ND-000490" = {
         param($cfg)
         $userLines = [regex]::Matches($cfg, '(?im)^username\s+(\S+)')
@@ -192,7 +254,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "Found $($names.Count) local account(s): $($names -join ', '). Manual review required - multiple accounts may be justified but must be documented." }
     }
- 
+
     "CISC-ND-000550" = {
         param($cfg, $ccBlock)
         if (-not $ccBlock) { return @{ Match = $false; Detail = "No 'aaa common-criteria policy' block found in configuration." } }
@@ -204,7 +266,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "No 'min-length' setting found in the common-criteria policy block." }
     }
- 
+
     "CISC-ND-000570" = {
         param($cfg, $ccBlock)
         if (-not $ccBlock) { return @{ Match = $false; Detail = "No 'aaa common-criteria policy' block found in configuration." } }
@@ -214,7 +276,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "No 'upper-case' requirement (>=1) found in the common-criteria policy block." }
     }
- 
+
     "CISC-ND-000580" = {
         param($cfg, $ccBlock)
         if (-not $ccBlock) { return @{ Match = $false; Detail = "No 'aaa common-criteria policy' block found in configuration." } }
@@ -224,7 +286,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "No 'lower-case' requirement (>=1) found in the common-criteria policy block." }
     }
- 
+
     "CISC-ND-000590" = {
         param($cfg, $ccBlock)
         if (-not $ccBlock) { return @{ Match = $false; Detail = "No 'aaa common-criteria policy' block found in configuration." } }
@@ -234,7 +296,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "No 'numeric-count' requirement (>=1) found in the common-criteria policy block." }
     }
- 
+
     "CISC-ND-000600" = {
         param($cfg, $ccBlock)
         if (-not $ccBlock) { return @{ Match = $false; Detail = "No 'aaa common-criteria policy' block found in configuration." } }
@@ -244,7 +306,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "No 'special-case' requirement (>=1) found in the common-criteria policy block." }
     }
- 
+
     "CISC-ND-000610" = {
         param($cfg, $ccBlock)
         if (-not $ccBlock) { return @{ Match = $false; Detail = "No 'aaa common-criteria policy' block found in configuration." } }
@@ -256,7 +318,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "No 'char-changes' setting found in the common-criteria policy block." }
     }
- 
+
     "CISC-ND-000620" = {
         param($cfg)
         $encSvc = [regex]::IsMatch($cfg, '(?im)^service password-encryption')
@@ -271,7 +333,7 @@ $RuleChecks = @{
         if ($weakEnable) { $missing += "weak 'enable password' is present" }
         return @{ Match = $false; Detail = "Password encryption issue(s): $($missing -join '; ')" }
     }
- 
+
     "CISC-ND-000720" = {
         param($cfg)
         $timeouts = [regex]::Matches($cfg, '(?im)^\s*exec-timeout\s+(\d+)\s+(\d+)')
@@ -289,7 +351,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "Found exec-timeout value(s) exceeding 5 minutes or disabled (0 0): $($tooLong -join ', '). Verify this applies to con/vty lines." }
     }
- 
+
     "CISC-ND-001030" = {
         param($cfg)
         $servers = [regex]::Matches($cfg, '(?im)^ntp server\s+(\S+)') | ForEach-Object { $_.Groups[1].Value }
@@ -300,7 +362,7 @@ $RuleChecks = @{
         }
         return @{ Match = $false; Detail = "No 'ntp server' statement found in configuration." }
     }
- 
+
     "CISC-ND-001150" = {
         param($cfg)
         $authEnabled = [regex]::IsMatch($cfg, '(?im)^ntp authenticate')
@@ -318,70 +380,99 @@ $RuleChecks = @{
         return @{ Match = $false; Detail = "NTP authentication incomplete - missing: $($missing -join ', ')" }
     }
 }
- 
+
 # ---------------------------------------------------------------------------
-# 4. Walk the cklb and apply checks
+# 3. Process each device
 # ---------------------------------------------------------------------------
- 
-$appliedCount = 0
-$openCount    = 0
-$naFoundCount = 0
-$totalRules   = 0
- 
-foreach ($stig in $cklb.stigs) {
-    foreach ($rule in $stig.rules) {
-        $totalRules++
-        $key = $rule.rule_version
- 
-        if (-not $key -or -not $RuleChecks.ContainsKey($key)) { continue }
- 
-        try {
-            $result = & $RuleChecks[$key] $configText $ccPolicyBlock
-        } catch {
-            Write-Warning "Check for $key ($($rule.rule_id)) threw an error: $_"
-            continue
+
+$deviceSummaries = @()
+
+foreach ($configPath in $ConfigPaths) {
+
+    $configText    = Get-Content -Raw -Path $configPath -Encoding UTF8
+    $ccPolicyBlock = Get-CcPolicyBlock -Config $configText
+    $baseName      = [System.IO.Path]::GetFileNameWithoutExtension($configPath)
+    $deviceName    = Get-DeviceName -Config $configText -FallbackName $baseName
+
+    # Fresh parse of the template for every device - avoids any shared
+    # object-reference state carrying over between iterations.
+    $cklb = $cklbTemplateText | ConvertFrom-Json
+
+    Write-Host "======================================================"
+    Write-Host "Device: $deviceName  (config: $(Split-Path -Leaf $configPath))"
+    Write-Host "======================================================"
+
+    $appliedCount = 0
+    $openCount    = 0
+    $naFoundCount = 0
+    $totalRules   = 0
+
+    foreach ($stig in $cklb.stigs) {
+        foreach ($rule in $stig.rules) {
+            $totalRules++
+            $key = $rule.rule_version
+
+            if (-not $key -or -not $RuleChecks.ContainsKey($key)) { continue }
+
+            try {
+                $result = & $RuleChecks[$key] $configText $ccPolicyBlock
+            } catch {
+                Write-Warning "Check for $key ($($rule.rule_id)) threw an error: $_"
+                continue
+            }
+
+            if ($null -eq $result) { continue }
+
+            $rule.status          = if ($result.Match) { "not_a_finding" } else { "open" }
+            $rule.finding_details = $result.Detail
+            $rule.comments        = "Auto-filled by Fill-Cklb-CiscoNDM.ps1 on $(Get-Date -Format 'yyyy-MM-dd HH:mm') - verify before submitting."
+
+            $appliedCount++
+            if ($result.Match) { $naFoundCount++ } else { $openCount++ }
+
+            $tag = if ($result.Match) { "NOT A FINDING" } else { "OPEN" }
+            Write-Host "  [$($rule.group_id)] $tag - $($rule.rule_title.Substring(0, [Math]::Min(65, $rule.rule_title.Length)))"
         }
- 
-        if ($null -eq $result) { continue }
- 
-        $rule.status          = if ($result.Match) { "not_a_finding" } else { "open" }
-        $rule.finding_details = $result.Detail
-        $rule.comments        = "Auto-filled by Fill-Cklb-CiscoNDM.ps1 on $(Get-Date -Format 'yyyy-MM-dd HH:mm') - verify before submitting."
- 
-        $appliedCount++
-        if ($result.Match) { $naFoundCount++ } else { $openCount++ }
- 
-        $tag = if ($result.Match) { "NOT A FINDING" } else { "OPEN" }
-        Write-Host "[$($rule.group_id)] $tag - $($rule.rule_title.Substring(0, [Math]::Min(70, $rule.rule_title.Length)))"
+    }
+
+    # Fresh checklist id per device output - avoids id collisions both
+    # against the original template and against every other device's output.
+    $oldId = $cklb.id
+    $cklb.id = [guid]::NewGuid().ToString()
+
+    $outputPath = Join-Path $OutputFolder "$deviceName`_filled.cklb"
+    $jsonOut = $cklb | ConvertTo-Json -Depth 50
+    # Windows PowerShell's -Encoding utf8 always prepends a UTF-8 BOM, which
+    # breaks strict JSON parsers (like the checklist viewer). Write without BOM.
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($outputPath, $jsonOut, $utf8NoBom)
+
+    Write-Host "  Checklist id: $oldId -> $($cklb.id)"
+    Write-Host "  Saved: $outputPath"
+    Write-Host ""
+
+    $deviceSummaries += [PSCustomObject]@{
+        Device      = $deviceName
+        Total       = $totalRules
+        Filled      = $appliedCount
+        NotAFinding = $naFoundCount
+        Open        = $openCount
+        Output      = $outputPath
     }
 }
- 
+
 # ---------------------------------------------------------------------------
-# 5. Save
+# 4. Overall summary
 # ---------------------------------------------------------------------------
- 
-$oldId = $cklb.id
-$cklb.id = [guid]::NewGuid().ToString()
-Write-Host "Checklist id changed: $oldId -> $($cklb.id)"
- 
-$jsonOut = $cklb | ConvertTo-Json -Depth 50
-# Windows PowerShell's -Encoding utf8 always prepends a UTF-8 BOM, which
-# breaks strict JSON parsers (like the checklist viewer). Write without BOM.
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-[System.IO.File]::WriteAllText($OutputPath, $jsonOut, $utf8NoBom)
- 
-Write-Host ""
+
 Write-Host "======================================================"
-Write-Host "Total rules in cklb:      $totalRules"
-Write-Host "Auto-filled:              $appliedCount"
-Write-Host "  -> Not a Finding:       $naFoundCount"
-Write-Host "  -> Open:                $openCount"
-Write-Host "Left as not_reviewed:     $($totalRules - $appliedCount)"
-Write-Host "Saved to: $OutputPath"
+Write-Host "BULK RUN COMPLETE - $($deviceSummaries.Count) device(s) processed"
 Write-Host "======================================================"
+$deviceSummaries | Format-Table Device, Total, Filled, NotAFinding, Open -AutoSize
+Write-Host "Output folder: $OutputFolder"
 Write-Host ""
 Write-Host "IMPORTANT: Review every auto-filled rule against the actual"
 Write-Host "config before submitting. These are heuristic regex checks,"
 Write-Host "not authoritative compliance determinations."
- 
+
 Pause-Exit 0
