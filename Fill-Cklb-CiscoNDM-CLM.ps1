@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
-    Auto-fills the "easy" checks in a Cisco IOS Switch NDM .cklb using a
-    device running-config, and saves a new .cklb with the results.
+    Auto-fills the "easy" checks in a Cisco IOS Switch NDM .cklb for one or
+    many devices at once, using one blank/template cklb plus each device's
+    running-config, and saves a separate filled .cklb per device.
 
     CONSTRAINED LANGUAGE MODE SAFE VERSION - no Add-Type, no New-Object of
     non-core types, no static .NET method calls ([regex]::, [System.IO.File]::,
@@ -9,9 +10,12 @@
     Json/ConvertTo-Json cmdlets, which all still work under CLM.
 
 .DESCRIPTION
-    Since CLM blocks Add-Type and WinForms (used for the GUI file pickers in
-    the earlier version of this script), this version takes its inputs as
-    plain parameters or interactive prompts instead - no GUI.
+    Since CLM blocks Add-Type and WinForms, this takes its inputs as plain
+    parameters or interactive prompts - no GUI. Point it at one template
+    cklb and either a single config file, a comma-separated list of config
+    files, or a folder full of them - it produces one filled .cklb per
+    device, named after the device's "hostname" line if found, otherwise
+    after the config file's own name.
 
     Covers 14 rules from the Cisco IOS Switch NDM STIG (matched by the
     stable "rule_version" / STIG ID field, e.g. CISC-ND-000550, so it keeps
@@ -36,29 +40,32 @@
     those genuinely need a human to check logs, external servers, etc.
 
     ALWAYS spot-check the auto-filled results against the actual config
-    before you submit the cklb. This is a time-saver, not a substitute for
+    before you submit each cklb. This is a time-saver, not a substitute for
     review.
 
-.PARAMETER CklbPath
-    Path to the input .cklb file. If omitted, you'll be prompted.
+.PARAMETER CklbTemplatePath
+    Path to the template .cklb file used as the starting point for every
+    device. If omitted, you'll be prompted.
 
-.PARAMETER ConfigPath
-    Path to the plain-text device config ("show running-config" output).
-    If omitted, you'll be prompted.
+.PARAMETER ConfigPaths
+    One or more paths to plain-text device configs, comma-separated if more
+    than one (e.g. -ConfigPaths sw1.txt,sw2.txt,sw3.txt). Can also be a
+    single folder path, in which case every .txt/.cfg/.log file in it is
+    used. If omitted, you'll be prompted for a folder.
 
-.PARAMETER OutputPath
-    Path to write the updated .cklb. If omitted, defaults to
-    "<original name>_filled.cklb" next to the input file.
+.PARAMETER OutputFolder
+    Folder to write the filled .cklb files into (one per device). If
+    omitted, defaults to a "filled" subfolder next to the template.
 
 .EXAMPLE
-    .\Fill-Cklb-CiscoNDM.ps1 -CklbPath .\blank.cklb -ConfigPath .\sw1-config.txt
+    .\Fill-Cklb-CiscoNDM-CLM.ps1 -CklbTemplatePath .\blank.cklb -ConfigPaths .\configs\
 #>
 
 [CmdletBinding()]
 param(
-    [string]$CklbPath,
-    [string]$ConfigPath,
-    [string]$OutputPath
+    [string]$CklbTemplatePath,
+    [string[]]$ConfigPaths,
+    [string]$OutputFolder
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,35 +74,40 @@ $ErrorActionPreference = "Stop"
 # 0. Get input paths (prompts instead of GUI dialogs - CLM has no WinForms)
 # ---------------------------------------------------------------------------
 
-if (-not $CklbPath) {
-    $CklbPath = Read-Host "Path to the .cklb file to fill in"
+if (-not $CklbTemplatePath) {
+    $CklbTemplatePath = Read-Host "Path to the template .cklb file"
 }
-if (-not (Test-Path $CklbPath)) { throw "Cklb file not found: $CklbPath" }
+if (-not (Test-Path $CklbTemplatePath)) { throw "Cklb file not found: $CklbTemplatePath" }
 
-if (-not $ConfigPath) {
-    $ConfigPath = Read-Host "Path to the device running-config text file"
+if (-not $ConfigPaths -or $ConfigPaths.Count -eq 0) {
+    $raw = Read-Host "Path to a device config file, OR a folder of config files"
+    $ConfigPaths = @($raw)
 }
-if (-not (Test-Path $ConfigPath)) { throw "Config file not found: $ConfigPath" }
+if ($ConfigPaths.Count -eq 1 -and (Test-Path $ConfigPaths[0] -PathType Container)) {
+    $ConfigPaths = Get-ChildItem -Path $ConfigPaths[0] -Include *.txt, *.cfg, *.log -File -Recurse | ForEach-Object { $_.FullName }
+}
+foreach ($p in $ConfigPaths) {
+    if (-not (Test-Path $p)) { throw "Config file not found: $p" }
+}
 
-if (-not $OutputPath) {
-    $dir  = Split-Path -Parent $CklbPath
-    $name = [System.IO.Path]::GetFileNameWithoutExtension($CklbPath)
+if (-not $OutputFolder) {
+    $dir = Split-Path -Parent $CklbTemplatePath
     if (-not $dir) { $dir = "." }
-    $OutputPath = Join-Path $dir "$name`_filled.cklb"
+    $OutputFolder = Join-Path $dir "filled"
+}
+if (-not (Test-Path $OutputFolder)) {
+    New-Item -ItemType Directory -Path $OutputFolder | Out-Null
 }
 
-# ---------------------------------------------------------------------------
-# 1. Load inputs
-# ---------------------------------------------------------------------------
+Write-Host "Template cklb: $CklbTemplatePath"
+Write-Host "Devices to process: $($ConfigPaths.Count)"
+Write-Host "Output folder: $OutputFolder"
+Write-Host ""
 
-Write-Host "Loading cklb:   $CklbPath"
-$cklb = Get-Content -Raw -Path $CklbPath -Encoding UTF8 | ConvertFrom-Json
-
-Write-Host "Loading config: $ConfigPath"
-$configText = Get-Content -Raw -Path $ConfigPath -Encoding UTF8
+$cklbTemplateText = Get-Content -Raw -Path $CklbTemplatePath -Encoding UTF8
 
 # ---------------------------------------------------------------------------
-# 2. Helpers - built entirely on the -match operator and String methods,
+# 1. Helpers - built entirely on the -match operator and String methods,
 #    both of which are core/approved under Constrained Language Mode.
 #    (Avoids [regex]::Matches/Match/IsMatch/Escape, which call methods on a
 #    non-core type and are blocked or unreliable under CLM.)
@@ -152,10 +164,18 @@ function Get-CcPolicyBlock {
     param([string]$Config)
     return Get-FirstMatchGroup -Text $Config -Pattern '(?ms)^aaa common-criteria policy\s+\S+\s*\r?\n(.*?)(?=^!)' -GroupNum 1
 }
-$ccPolicyBlock = Get-CcPolicyBlock -Config $configText
+
+function Get-DeviceName {
+    # Names the output file after the device's "hostname" line if present,
+    # otherwise falls back to the config file's own base name.
+    param([string]$Config, [string]$FallbackName)
+    $name = Get-FirstMatchGroup -Text $Config -Pattern '(?im)^hostname\s+(\S+)' -GroupNum 1
+    if ($name) { return $name }
+    return $FallbackName
+}
 
 # ---------------------------------------------------------------------------
-# 3. Rule checks, keyed by the cklb's stable "rule_version" (STIG ID) field
+# 2. Rule checks, keyed by the cklb's stable "rule_version" (STIG ID) field
 # ---------------------------------------------------------------------------
 
 $RuleChecks = @{
@@ -337,72 +357,101 @@ $RuleChecks = @{
 }
 
 # ---------------------------------------------------------------------------
-# 4. Walk the cklb and apply checks
+# 3. Process each device
 # ---------------------------------------------------------------------------
 
-$appliedCount = 0
-$openCount    = 0
-$naFoundCount = 0
-$totalRules   = 0
+$deviceSummaries = @()
 
-foreach ($stig in $cklb.stigs) {
-    foreach ($rule in $stig.rules) {
-        $totalRules++
-        $key = $rule.rule_version
+foreach ($configPath in $ConfigPaths) {
 
-        if (-not $key -or -not $RuleChecks.ContainsKey($key)) { continue }
+    $configText    = Get-Content -Raw -Path $configPath -Encoding UTF8
+    $ccPolicyBlock = Get-CcPolicyBlock -Config $configText
+    $baseName      = [System.IO.Path]::GetFileNameWithoutExtension($configPath)
+    $deviceName    = Get-DeviceName -Config $configText -FallbackName $baseName
 
-        try {
-            $result = & $RuleChecks[$key] $configText $ccPolicyBlock
-        } catch {
-            Write-Warning "Check for $key ($($rule.rule_id)) threw an error: $_"
-            continue
+    # Fresh parse of the template for every device - avoids any shared
+    # object-reference state carrying over between iterations.
+    $cklb = $cklbTemplateText | ConvertFrom-Json
+
+    Write-Host "======================================================"
+    Write-Host "Device: $deviceName  (config: $(Split-Path -Leaf $configPath))"
+    Write-Host "======================================================"
+
+    $appliedCount = 0
+    $openCount    = 0
+    $naFoundCount = 0
+    $totalRules   = 0
+
+    foreach ($stig in $cklb.stigs) {
+        foreach ($rule in $stig.rules) {
+            $totalRules++
+            $key = $rule.rule_version
+
+            if (-not $key -or -not $RuleChecks.ContainsKey($key)) { continue }
+
+            try {
+                $result = & $RuleChecks[$key] $configText $ccPolicyBlock
+            } catch {
+                Write-Warning "Check for $key ($($rule.rule_id)) threw an error: $_"
+                continue
+            }
+
+            if ($null -eq $result) { continue }
+
+            $rule.status          = if ($result.Match) { "not_a_finding" } else { "open" }
+            $rule.finding_details = $result.Detail
+            $rule.comments        = "Auto-filled by Fill-Cklb-CiscoNDM-CLM.ps1 on $(Get-Date -Format 'yyyy-MM-dd HH:mm') - verify before submitting."
+
+            $appliedCount++
+            if ($result.Match) { $naFoundCount++ } else { $openCount++ }
+
+            $tag = if ($result.Match) { "NOT A FINDING" } else { "OPEN" }
+            Write-Host "  [$($rule.group_id)] $tag - $($rule.rule_title.Substring(0, [Math]::Min(65, $rule.rule_title.Length)))"
         }
+    }
 
-        if ($null -eq $result) { continue }
+    # Fresh checklist id per device - avoids id collisions both against the
+    # original template and against every other device's output. Written
+    # with Set-Content -Encoding utf8 (adds a BOM on Windows PowerShell),
+    # then the BOM bytes are stripped back out using Get-Content/Set-Content
+    # -Encoding Byte + array slicing. No New-Object, no [System.IO.File]:: -
+    # just cmdlets and native array indexing, both fine under CLM.
+    $oldId = $cklb.id
+    $cklb.id = New-SimpleGuid
 
-        $rule.status          = if ($result.Match) { "not_a_finding" } else { "open" }
-        $rule.finding_details = $result.Detail
-        $rule.comments        = "Auto-filled by Fill-Cklb-CiscoNDM.ps1 on $(Get-Date -Format 'yyyy-MM-dd HH:mm') - verify before submitting."
+    $outputPath = Join-Path $OutputFolder "$deviceName`_filled.cklb"
+    $jsonOut = $cklb | ConvertTo-Json -Depth 50
+    Set-Content -Path $outputPath -Value $jsonOut -Encoding utf8
 
-        $appliedCount++
-        if ($result.Match) { $naFoundCount++ } else { $openCount++ }
+    $bytes = Get-Content -Path $outputPath -Encoding Byte -Raw
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 239 -and $bytes[1] -eq 187 -and $bytes[2] -eq 191) {
+        $bytes = $bytes[3..($bytes.Length - 1)]
+        Set-Content -Path $outputPath -Value $bytes -Encoding Byte
+    }
 
-        $tag = if ($result.Match) { "NOT A FINDING" } else { "OPEN" }
-        Write-Host "[$($rule.group_id)] $tag - $($rule.rule_title.Substring(0, [Math]::Min(70, $rule.rule_title.Length)))"
+    Write-Host "  Checklist id: $oldId -> $($cklb.id)"
+    Write-Host "  Saved: $outputPath"
+    Write-Host ""
+
+    $deviceSummaries += [PSCustomObject]@{
+        Device      = $deviceName
+        Total       = $totalRules
+        Filled      = $appliedCount
+        NotAFinding = $naFoundCount
+        Open        = $openCount
+        Output      = $outputPath
     }
 }
 
 # ---------------------------------------------------------------------------
-# 5. Save - written with Set-Content -Encoding utf8 (always adds a BOM on
-#    Windows PowerShell), then the BOM bytes are stripped back out using
-#    Get-Content/Set-Content -Encoding Byte + array slicing. No New-Object,
-#    no [System.IO.File]:: - just cmdlets and native array indexing, both
-#    fine under Constrained Language Mode.
+# 4. Overall summary
 # ---------------------------------------------------------------------------
 
-$oldId = $cklb.id
-$cklb.id = New-SimpleGuid
-Write-Host "Checklist id changed: $oldId -> $($cklb.id)"
-
-$jsonOut = $cklb | ConvertTo-Json -Depth 50
-Set-Content -Path $OutputPath -Value $jsonOut -Encoding utf8
-
-$bytes = Get-Content -Path $OutputPath -Encoding Byte -Raw
-if ($bytes.Length -ge 3 -and $bytes[0] -eq 239 -and $bytes[1] -eq 187 -and $bytes[2] -eq 191) {
-    $bytes = $bytes[3..($bytes.Length - 1)]
-    Set-Content -Path $OutputPath -Value $bytes -Encoding Byte
-}
-
-Write-Host ""
 Write-Host "======================================================"
-Write-Host "Total rules in cklb:      $totalRules"
-Write-Host "Auto-filled:              $appliedCount"
-Write-Host "  -> Not a Finding:       $naFoundCount"
-Write-Host "  -> Open:                $openCount"
-Write-Host "Left as not_reviewed:     $($totalRules - $appliedCount)"
-Write-Host "Saved to: $OutputPath"
+Write-Host "BULK RUN COMPLETE - $($deviceSummaries.Count) device(s) processed"
 Write-Host "======================================================"
+$deviceSummaries | Format-Table Device, Total, Filled, NotAFinding, Open -AutoSize
+Write-Host "Output folder: $OutputFolder"
 Write-Host ""
 Write-Host "IMPORTANT: Review every auto-filled rule against the actual"
 Write-Host "config before submitting. These are heuristic regex checks,"
