@@ -85,7 +85,7 @@
   button.run:disabled { background: var(--border); color: var(--dim); cursor: not-allowed; }
   .summary {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
     gap: 0.75rem;
     margin: 1.25rem 0;
   }
@@ -94,6 +94,18 @@
   .stat .l { font-size: 0.72rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
   .stat.ok .n { color: var(--ok); }
   .stat.open .n { color: var(--open); }
+  .stat.manual .n { color: var(--accent); }
+  .stat.error .n { color: var(--open); }
+  .rules-banner {
+    font-size: 0.78rem;
+    color: var(--dim);
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 1rem;
+  }
+  .rules-banner strong { color: var(--text); }
   table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
   th { text-align: left; color: var(--dim); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
   td { padding: 0.55rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -102,6 +114,11 @@
   .status { font-weight: 700; font-size: 0.72rem; text-transform: uppercase; white-space: nowrap; }
   .status.na { color: var(--ok); }
   .status.open { color: var(--open); }
+  .status.error { color: var(--open); }
+  .confidence { font-size: 0.68rem; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
+  .confidence.high { color: var(--ok); }
+  .confidence.medium { color: var(--accent); }
+  .confidence.low { color: var(--open); }
   .detail { color: var(--dim); font-size: 0.8rem; }
   .download {
     display: block;
@@ -134,12 +151,94 @@
   }
   .device-head h3 { margin: 0; font-size: 0.95rem; font-family: var(--mono); color: var(--text); }
   .device-head .counts { font-size: 0.78rem; color: var(--dim); }
+  .status.manual { color: var(--dim); }
+  .evidence { font-size: 0.78rem; font-family: var(--mono); color: var(--text); }
+  .evidence div { padding: 0.1rem 0; }
+  .evidence .none { color: var(--dim); font-style: italic; font-family: inherit; }
+  .subhead {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--dim);
+    margin: 1rem 0 0.4rem;
+  }
+  .risky-panel {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+  }
+  .risky-header {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    padding: 0.75rem 0.9rem;
+    font-size: 0.78rem;
+    color: var(--dim);
+    cursor: pointer;
+    background: rgba(255,255,255,0.02);
+  }
+  .risky-header .chevron { display: inline-block; margin-top: 0.1rem; font-size: 0.7em; transition: transform 0.12s; flex-shrink: 0; }
+  .risky-header.expanded .chevron { transform: rotate(90deg); }
+  .risky-header strong { color: var(--text); }
+  .risky-list { padding: 0.25rem 0.9rem 0.75rem; border-top: 1px solid var(--border); }
+  .risky-controls { display: flex; gap: 0.5rem; padding: 0.6rem 0; }
+  .risky-controls button {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  .risky-controls button:hover { border-color: var(--accent); color: var(--accent); }
+  .risky-item {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .risky-item:last-child { border-bottom: none; }
+  .risky-item input { margin-top: 0.2rem; flex-shrink: 0; }
+  .risky-item .rule-id { font-family: var(--mono); color: var(--accent); }
+  .risky-item .rule-blurb { color: var(--dim); margin-top: 0.15rem; }
+  .vid-toggle { cursor: pointer; user-select: none; }
+  .vid-toggle:hover { text-decoration: underline; }
+  .vid-toggle .chevron { display: inline-block; margin-right: 0.25rem; font-size: 0.7em; transition: transform 0.12s; }
+  .vid-toggle.expanded .chevron { transform: rotate(90deg); }
+  .status.manual-off { color: var(--dim); }
+  .detail-row td {
+    background: rgba(255,255,255,0.02);
+    font-size: 0.78rem;
+    padding: 0.8rem 1rem;
+  }
+  .detail-row dl { margin: 0; }
+  .detail-row dt {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--dim);
+    margin-top: 0.7rem;
+  }
+  .detail-row dt:first-child { margin-top: 0; }
+  .detail-row dd {
+    margin: 0.2rem 0 0;
+    color: var(--text);
+    white-space: pre-wrap;
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    line-height: 1.4;
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>CKLB Auto-Fill (Bulk)</h1>
-  <p class="subtitle">Cisco IOS Switch NDM STIG — one template checklist, any number of device configs, matched against 14 rule checks entirely in your browser. Nothing is uploaded anywhere.</p>
+  <p class="subtitle" id="subtitleText">Cisco IOS Switch NDM STIG — one template checklist, any number of device configs, matched against rule checks entirely in your browser. Nothing is uploaded anywhere.</p>
 
   <div class="card">
     <h2>1. Template .cklb (used as the starting point for every device)</h2>
@@ -157,6 +256,21 @@
       <div class="filename" id="nameCfg"></div>
       <input type="file" id="fileCfg" accept=".txt,.cfg,.log,text/plain" multiple>
     </div>
+    <div class="rules-banner hidden" id="cfgWarning" style="margin-top:0.75rem;"></div>
+  </div>
+
+  <div class="risky-panel">
+    <div class="risky-header" id="riskyHeader">
+      <span class="chevron">&#9656;</span>
+      <span><strong>Uncertain checks</strong> — <span id="riskyCountText">8 checks</span> have known blind spots (shown below). <strong>All off by default</strong> - each one falls back to manual review with evidence shown unless you explicitly enable it, having judged the trade-off acceptable for your environment.</span>
+    </div>
+    <div class="risky-list hidden" id="riskyList">
+      <div class="risky-controls">
+        <button type="button" id="riskyEnableAll">Enable all</button>
+        <button type="button" id="riskyDisableAll">Disable all</button>
+      </div>
+      <div id="riskyItems"></div>
+    </div>
   </div>
 
   <button class="run" id="runBtn" disabled>Run checks</button>
@@ -166,17 +280,22 @@
       <h2>Results</h2>
       <div class="summary">
         <div class="stat"><div class="n" id="statDevices">0</div><div class="l">Devices</div></div>
-        <div class="stat"><div class="n" id="statFilled">0</div><div class="l">Auto-filled / device</div></div>
+        <div class="stat"><div class="n" id="statFilled">0</div><div class="l">Automated results (total)</div></div>
         <div class="stat ok"><div class="n" id="statNA">0</div><div class="l">Not a finding (total)</div></div>
         <div class="stat open"><div class="n" id="statOpen">0</div><div class="l">Open (total)</div></div>
+        <div class="stat manual"><div class="n" id="statManual">0</div><div class="l">Manual review (total)</div></div>
+        <div class="stat manual"><div class="n" id="statNotAutomated">0</div><div class="l">Not automated (total)</div></div>
+        <div class="stat error hidden" id="statErrorWrap"><div class="n" id="statErrors">0</div><div class="l">Automation errors</div></div>
       </div>
+      <div class="rules-banner hidden" id="errorBanner" style="border-color: var(--open); color: var(--open); font-weight: 700;"></div>
+      <div class="rules-banner" id="rulesBanner"></div>
       <div id="deviceTables"></div>
       <a class="download hidden" id="downloadLink">Download filled .cklb files (.zip)</a>
     </div>
   </div>
 
   <div class="note">
-    Covers CISC-ND-000010, 000160, 000470, 000490, 000550, 000570, 000580, 000590, 000600, 000610, 000620, 000720, 001030, 001150. Everything else in the cklb is left <code>not_reviewed</code> — those need log review, external server checks, or the Cisco support matrix. Always spot-check auto-filled results against the actual config before submitting. Each device's output file is named after its <code>hostname</code> line if found, otherwise after the config file's own name, and gets its own freshly generated checklist ID so none of the exported files collide with each other or the original template.
+    Every rule in the loaded cklb gets either a confident pass/fail, a "Manual Review" verdict with evidence attached, or is left fully untouched for genuine human judgment (the exact split is shown live above after you run - it depends on which STIG you load and which "Uncertain checks" you enable). Click any V-ID to see that rule's full title, discussion, check text, and fix text. Uncertain checks (panel above, all off by default) force-adjudicate a known-imperfect subset using bare presence/absence only - enable individually only where you've judged the trade-off acceptable for your environment. Always spot-check auto-filled results before submitting. Each device's output is named after its <code>hostname</code> line if found, otherwise after the config file's own name, and gets its own freshly generated checklist ID.
   </div>
 </div>
 
@@ -188,6 +307,64 @@
   let cklbTemplateText = null;
   let configFiles = []; // [{name, text}]
 
+  const TOOL_VERSION = "2.0";
+
+  // -------------------------------------------------------------------
+  // Filename safety - never trust config-derived text (hostname) blindly
+  // as a filesystem name.
+  // -------------------------------------------------------------------
+  function sanitizeFilename(name) {
+    const cleaned = String(name || "")
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
+      .replace(/[. ]+$/, "")
+      .trim();
+    return cleaned || "device";
+  }
+
+  // -------------------------------------------------------------------
+  // Basic structural validation so a malformed/unrelated JSON file can't
+  // get as far as "Run checks" and produce confusing runtime behavior.
+  // -------------------------------------------------------------------
+  function validateCklbStructure(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      return "The file's root is not a JSON object.";
+    }
+    if (!Array.isArray(data.stigs)) {
+      return "Missing or invalid 'stigs' array - this doesn't look like a .cklb checklist.";
+    }
+    for (const stig of data.stigs) {
+      if (!stig || !Array.isArray(stig.rules)) {
+        return "A STIG entry is missing its 'rules' array.";
+      }
+      for (const rule of stig.rules) {
+        if (!rule || typeof rule !== "object") {
+          return "A rule entry is not an object.";
+        }
+        if (!rule.rule_version || !rule.group_id || !("status" in rule)) {
+          return `A rule is missing a required field (rule_version/group_id/status) near group_id=${rule.group_id || "unknown"}.`;
+        }
+      }
+    }
+    return null; // structurally OK
+  }
+
+  // -------------------------------------------------------------------
+  // Loose heuristic so a non-config text dump (or a "show running-config |
+  // section ..." fragment) doesn't get silently graded as if it were a
+  // full Cisco IOS running-config. Non-blocking - just a warning.
+  // -------------------------------------------------------------------
+  function looksLikeCiscoConfig(text) {
+    const signals = [
+      /^hostname\s+\S+/im,
+      /^version\s+\d/im,
+      /^!\s*$/m,
+      /^interface\s+\S+/im,
+      /^line\s+(con|vty|aux)\b/im
+    ];
+    const hits = signals.filter(re => re.test(text)).length;
+    return hits >= 2;
+  }
+
   // -------------------------------------------------------------------
   // File pickers (click + drag/drop)
   // -------------------------------------------------------------------
@@ -196,7 +373,7 @@
     const input = document.getElementById(inputId);
     const nameEl = document.getElementById(nameId);
 
-    drop.addEventListener("click", () => input.click());
+    drop.addEventListener("click", () => { input.value = ""; input.click(); });
     input.addEventListener("change", (e) => {
       if (e.target.files.length) handleFile(e.target.files[0]);
     });
@@ -212,6 +389,10 @@
       nameEl.textContent = file.name;
       const reader = new FileReader();
       reader.onload = (ev) => onLoad(ev.target.result, file.name);
+      reader.onerror = () => {
+        alert(`Could not read "${file.name}": ${reader.error ? reader.error.message : "unknown file read error"}. Please try again or choose a different file.`);
+        nameEl.textContent = "";
+      };
       reader.readAsText(file, "UTF-8");
     }
   }
@@ -221,7 +402,7 @@
     const input = document.getElementById(inputId);
     const nameEl = document.getElementById(nameId);
 
-    drop.addEventListener("click", () => input.click());
+    drop.addEventListener("click", () => { input.value = ""; input.click(); });
     input.addEventListener("change", (e) => {
       if (e.target.files.length) handleFiles(e.target.files);
     });
@@ -238,36 +419,149 @@
       nameEl.textContent = files.length === 1 ? files[0].name : `${files.length} files selected`;
       let remaining = files.length;
       const loaded = [];
+      const failed = [];
       files.forEach(file => {
         const reader = new FileReader();
         reader.onload = (ev) => {
           loaded.push({ name: file.name, text: ev.target.result });
           remaining--;
-          if (remaining === 0) onLoad(loaded);
+          if (remaining === 0) finish();
+        };
+        reader.onerror = () => {
+          failed.push(file.name);
+          remaining--;
+          if (remaining === 0) finish();
         };
         reader.readAsText(file, "UTF-8");
       });
+      function finish() {
+        if (failed.length) {
+          alert(`Could not read ${failed.length} file(s): ${failed.join(", ")}. The remaining ${loaded.length} file(s) loaded fine and will still be processed.`);
+        }
+        if (loaded.length) onLoad(loaded);
+      }
     }
   }
 
   wireDropSingle("dropCklb", "fileCklb", "nameCklb", (text, fname) => {
+    let parsed;
     try {
-      cklbTemplateData = JSON.parse(text);
-      cklbTemplateText = text;
-      checkReady();
+      parsed = JSON.parse(text);
     } catch (err) {
       alert("Could not parse that as JSON: " + err.message);
       cklbTemplateData = null;
+      checkReady();
+      return;
     }
+    const structureError = validateCklbStructure(parsed);
+    if (structureError) {
+      alert("Invalid CKLB structure: " + structureError);
+      cklbTemplateData = null;
+      checkReady();
+      return;
+    }
+    cklbTemplateData = parsed;
+    cklbTemplateText = text;
+    renderRiskyItems(); // re-render with real V-IDs now that a template is loaded
+    checkReady();
   });
+
+  const cfgWarningEl = document.getElementById("cfgWarning");
 
   wireDropMulti("dropCfg", "fileCfg", "nameCfg", (files) => {
     configFiles = files;
+    const suspicious = files.filter(f => !looksLikeCiscoConfig(f.text)).map(f => f.name);
+    if (cfgWarningEl) {
+      if (suspicious.length > 0) {
+        cfgWarningEl.classList.remove("hidden");
+        cfgWarningEl.innerHTML = `⚠ ${suspicious.length} file(s) don't look like a Cisco IOS running-config (${escapeHtml(suspicious.join(", "))}). Checks will still run, but results for these may be unreliable.`;
+      } else {
+        cfgWarningEl.classList.add("hidden");
+        cfgWarningEl.innerHTML = "";
+      }
+    }
     checkReady();
   });
 
   function checkReady() {
     document.getElementById("runBtn").disabled = !(cklbTemplateData && configFiles.length);
+  }
+
+  // -------------------------------------------------------------------
+  // Per-rule opt-out for checks with known blind spots. All run by default
+  // (matching prior behavior); unchecking one makes that rule fall through
+  // to the same generic manual-evidence bucket as the fully-manual rules,
+  // instead of being auto-adjudicated by its RULE_CHECKS entry.
+  // -------------------------------------------------------------------
+  // Rules removed from this list over time (000010, 000490, 000720, 001200,
+  // 001210) had their underlying blind spot fixed directly in RULE_CHECKS
+  // instead - e.g. real line-block parsing, or falling back to "manual"
+  // instead of a false "Open" when the config is genuinely ambiguous. Only
+  // rules with a REMAINING structural limitation that can't be resolved by
+  // adjudication logic alone (it's a parsing/verification ceiling, not a
+  // logic bug) stay in this opt-in list.
+  const RISKY_RULES = [
+    {
+      id: "CISC-ND-000620",
+      label: "Password Encryption Hash Type",
+      blurb: "This rule's own check text uses Type 5 (MD5) as its example, so the checker does not fail on Type 5 - that's intentional, not a gap. Enabling this just means you additionally want the hash type (5 vs 8/9) surfaced as informational evidence rather than left for manual review; it doesn't change what counts as compliant."
+    },
+    {
+      id: "CISC-ND-001030",
+      label: "NTP Redundancy",
+      blurb: "Parses vrf-scoped, IPv6, and keyed 'ntp server' lines, but still can't verify the servers are reachable, correctly routed, or that an address isn't simply invalid/typo'd - that requires live device state this tool doesn't have."
+    },
+    {
+      id: "CISC-ND-001450",
+      label: "Syslog Servers",
+      blurb: "Regex covers 'logging host <ip>' (including vrf-scoped) and bare 'logging <ip>' formats, IPv6 addresses, and FQDN hostnames. Still can't rule out an unusual Cisco syntax variant this pattern doesn't anticipate - a compliant device using such a form could be falsely flagged as Open."
+    }
+  ];
+
+  const riskyHeader = document.getElementById("riskyHeader");
+  const riskyList = document.getElementById("riskyList");
+  const riskyItems = document.getElementById("riskyItems");
+
+  function renderRiskyItems() {
+    // Resolve each rule's actual V-ID from the loaded template if one is
+    // available yet; fall back to the stable rule_version id otherwise
+    // (e.g. before any file is loaded, or if this STIG doesn't have it).
+    let vidLookup = {};
+    if (cklbTemplateData) {
+      (cklbTemplateData.stigs || []).forEach(stig => (stig.rules || []).forEach(rule => {
+        vidLookup[rule.rule_version] = rule.group_id;
+      }));
+    }
+    riskyItems.innerHTML = RISKY_RULES.map(r => `
+      <label class="risky-item">
+        <input type="checkbox" data-risky-id="${r.id}">
+        <div>
+          <span class="rule-id">${escapeHtml(vidLookup[r.id] || r.id)}</span> — <strong>Enable automated adjudication: ${escapeHtml(r.label)}</strong>
+          <div class="rule-blurb">⚠ Known limitation: ${escapeHtml(r.blurb)}</div>
+        </div>
+      </label>
+    `).join("");
+  }
+  renderRiskyItems();
+  document.getElementById("riskyCountText").textContent = RISKY_RULES.length + " checks";
+
+  riskyHeader.addEventListener("click", () => {
+    riskyList.classList.toggle("hidden");
+    riskyHeader.classList.toggle("expanded");
+  });
+  document.getElementById("riskyEnableAll").addEventListener("click", () => {
+    document.querySelectorAll("#riskyItems input[type=checkbox]").forEach(cb => cb.checked = true);
+  });
+  document.getElementById("riskyDisableAll").addEventListener("click", () => {
+    document.querySelectorAll("#riskyItems input[type=checkbox]").forEach(cb => cb.checked = false);
+  });
+
+  function getDisabledRiskyKeys() {
+    const disabled = new Set();
+    document.querySelectorAll("#riskyItems input[type=checkbox]").forEach(cb => {
+      if (!cb.checked) disabled.add(cb.getAttribute("data-risky-id"));
+    });
+    return disabled;
   }
 
   // -------------------------------------------------------------------
@@ -296,183 +590,943 @@
   }
 
   // -------------------------------------------------------------------
+  // Generic IOS config-block parser. Understands that "line con 0",
+  // "line vty 0 4", "line vty 5 15", etc. are indented sub-blocks that end
+  // at the next block header, a bare "!", or any other unindented line -
+  // rather than relying on a single regex's lookahead to guess where a
+  // block stops. Shared by every check that needs to reason about line
+  // context specifically instead of "does this string appear anywhere".
+  // -------------------------------------------------------------------
+  function parseConfigBlocks(cfg, headerRegex) {
+    const lines = cfg.split(/\r?\n/);
+    const blocks = [];
+    let current = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (headerRegex.test(line)) {
+        if (current) blocks.push(current);
+        current = { header: line.trim(), lines: [] };
+        continue;
+      }
+      if (current) {
+        if (/^!\s*$/.test(line)) {
+          blocks.push(current);
+          current = null;
+          continue;
+        }
+        if (/^\S/.test(line)) {
+          // Any other unindented line implicitly closes a line/interface
+          // sub-block, since Cisco IOS always indents block bodies.
+          blocks.push(current);
+          current = null;
+          continue;
+        }
+        current.lines.push(line);
+      }
+    }
+    if (current) blocks.push(current);
+    return blocks;
+  }
+
+  function parseLineBlocks(cfg) {
+    return parseConfigBlocks(cfg, /^line\s+(con|vty|aux|tty)\s+\S+/i);
+  }
+
+  // -------------------------------------------------------------------
+  // NTP server line parser - handles vrf-scoped, IPv6, and keyed forms,
+  // e.g.: "ntp server 10.1.1.1", "ntp server vrf MGMT 10.1.1.3",
+  // "ntp server 2001:db8::1", "ntp server 10.1.1.1 key 5",
+  // "ntp server 10.1.1.1 source Loopback0".
+  // -------------------------------------------------------------------
+  function parseNtpServers(cfg) {
+    const raw = allMatches(cfg, /^ntp server\s+(?:vrf\s+(\S+)\s+)?(\S+)(.*)$/im);
+    return raw.map(m => {
+      const rest = m[3] || "";
+      const keyMatch = rest.match(/\bkey\s+(\d+)/i);
+      const sourceMatch = rest.match(/\bsource\s+(\S+)/i);
+      return {
+        raw: m[0].trim(),
+        vrf: m[1] || null,
+        address: m[2],
+        key: keyMatch ? keyMatch[1] : null,
+        source: sourceMatch ? sourceMatch[1] : null
+      };
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // TACACS+/RADIUS server parser - Cisco IOS/IOS-XE supports two
+  // unrelated syntaxes for the same thing, and a device can use either
+  // (or, in practice, one or the other consistently):
+  //   Legacy:  "tacacs-server host 10.1.1.1" / "radius-server host 10.1.1.1"
+  //   Modern:  "tacacs server NAME" / "radius server NAME" block containing
+  //            an indented "address ipv4 10.1.1.1" (or ipv6) line.
+  // Recognizing only the legacy form (as an earlier version of this tool
+  // did) meant a device using only the modern block syntax - which is the
+  // current Cisco-recommended form - was counted as having ZERO servers.
+  // Both forms are normalized into the same {address, raw} shape and
+  // de-duplicated by address so counting redundancy is syntax-agnostic.
+  // -------------------------------------------------------------------
+  function parseAaaServers(cfg, kind) {
+    // kind: "tacacs" or "radius"
+    const results = [];
+    const legacyRe = kind === "tacacs"
+      ? /^tacacs-server host\s+(\S+)/im
+      : /^radius-server host\s+(\S+)/im;
+    allMatches(cfg, legacyRe).forEach(m => {
+      results.push({ address: m[1], raw: m[0].trim() });
+    });
+
+    const headerRe = kind === "tacacs" ? /^tacacs server\s+\S+/i : /^radius server\s+\S+/i;
+    parseConfigBlocks(cfg, headerRe).forEach(b => {
+      const body = b.lines.join("\n");
+      const am = body.match(/^\s*address\s+ipv[46]\s+(\S+)/im);
+      results.push({
+        address: am ? am[1] : null,
+        raw: am ? `${b.header} (address ${am[1]})` : `${b.header} (no address line found)`
+      });
+    });
+    return results;
+  }
+
+  // -------------------------------------------------------------------
+  // Requirement tables - keep the numeric thresholds DISA's STIG mandates
+  // as data, not buried inside a function body, so a future STIG revision
+  // is a one-line edit instead of a code hunt.
+  // -------------------------------------------------------------------
+  const REQUIREMENTS = {
+    "CISC-ND-000150": { maxAttempts: 3 },
+    // No specific numeric ceiling is stated in this rule's own check text
+    // for session-limit - only "some restriction must exist". Leave null
+    // rather than inventing a number; the checker surfaces the configured
+    // value for manual sanity-check instead of silently enforcing a made-up
+    // threshold. Set a number here if your org's policy defines one.
+    "CISC-ND-000010": { maxSessionLimit: null }
+  };
+
+  const CC_REQUIREMENTS = {
+    "CISC-ND-000550": { key: "min-length", min: 15 },
+    "CISC-ND-000570": { key: "upper-case", min: 1 },
+    "CISC-ND-000580": { key: "lower-case", min: 1 },
+    "CISC-ND-000590": { key: "numeric-count", min: 1 },
+    "CISC-ND-000600": { key: "special-case", min: 1 },
+    "CISC-ND-000610": { key: "char-changes", min: 8 }
+  };
+
+  // -------------------------------------------------------------------
+  // Rule-specific adjudication rationale, kept as data rather than buried
+  // in inline comments inside a rule function - makes it possible to
+  // surface "why did this pass despite looking weak" directly wherever a
+  // reviewer is looking (currently used to build the informational note
+  // in 000620's evidence), without duplicating the explanation in code
+  // comments that a UI can't reach.
+  // -------------------------------------------------------------------
+  const RULE_METADATA = {
+    "CISC-ND-000620": {
+      rationale: "This rule's own check text uses Type 5 (MD5-based 'enable secret 5 ...') as its example, so a Type 5 hash is not treated as a failure here - that would enforce a stricter requirement than the rule itself states. Type 8/9 (SHA-256) is stronger and worth migrating to, but the hash type is surfaced as informational evidence only; it does not change the verdict."
+    }
+  };
+
+  // -------------------------------------------------------------------
+  // Services/daemons this NDM STIG's unnecessary-services rule prohibits.
+  // Kept as a data table (with a pointer back to the rule ID whose loaded
+  // check_content it should be cross-checked against) rather than a bare
+  // array, since a STIG revision to this list should be a data edit, not
+  // an archaeology exercise through a regex filter.
+  // -------------------------------------------------------------------
+  const PROHIBITED_SERVICES = {
+    ruleId: "CISC-ND-000470",
+    services: ["boot network", "ip boot server", "ip bootp server", "ip dns server",
+      "ip identd", "ip finger", "ip http server", "ip rcmd rcp-enable",
+      "ip rcmd rsh-enable", "service config", "service finger",
+      "service tcp-small-servers", "service udp-small-servers"]
+  };
+
+  // -------------------------------------------------------------------
+  // Single internal result vocabulary. Every RULE_CHECKS function may
+  // still return either the legacy {match: boolean} shape or the newer
+  // {status: "pass"|"fail"|"manual"|"not_applicable"} shape - this
+  // normalizes either into one contract and throws a loud, visible
+  // automation error (rather than silently misbehaving) if a checker
+  // returns something that matches neither.
+  // -------------------------------------------------------------------
+  const VALID_STATUS_KINDS = new Set(["pass", "fail", "manual", "not_applicable"]);
+
+  function normalizeCheckResult(raw) {
+    if (raw == null) return null;
+    let statusKind;
+    if (raw.status === "manual" || raw.status === "not_applicable" ||
+        raw.status === "pass" || raw.status === "fail") {
+      statusKind = raw.status;
+    } else if (typeof raw.match === "boolean") {
+      statusKind = raw.match ? "pass" : "fail";
+    } else {
+      throw new Error("Malformed check result - expected a 'match' boolean or a valid 'status', got: " + JSON.stringify(raw));
+    }
+    if (!VALID_STATUS_KINDS.has(statusKind)) {
+      throw new Error("Malformed check result - unrecognized status '" + statusKind + "'");
+    }
+    return {
+      statusKind,
+      confidence: raw.confidence || null,
+      detail: raw.detail || "",
+      evidence: Array.isArray(raw.evidence) ? raw.evidence : []
+    };
+  }
+
+  // -------------------------------------------------------------------
+  // Manual-review evidence extraction — generic across ANY STIG, not just
+  // Cisco NDM. Every DISA rule's check_content includes literal example
+  // config lines the auditor is told to look for (e.g. "logging trap
+  // critical"). For rules we don't auto-adjudicate, pull those example
+  // command patterns out and grep the device's actual config for matches,
+  // so the reviewer sees relevant lines instead of hunting the full config.
+  // This is purely informational and is never written into the exported cklb.
+  // -------------------------------------------------------------------
+  const NARRATIVE_STARTS = ["verify","note","if ","this is","review","check",
+    "confirm","ensure","the ","interview","examine","obtain","when","if,","for "];
+
+  function isConfigLikeLine(line) {
+    const t = line.trim();
+    if (!t) return false;
+    if (t.split(/\s+/).length > 10) return false;
+    const low = t.toLowerCase();
+    if (NARRATIVE_STARTS.some(s => low.startsWith(s))) return false;
+    if (t.endsWith(".") || t.includes("?")) return false;
+    return /^[A-Za-z0-9][A-Za-z0-9\-.\/\s#:_]+$/.test(t);
+  }
+
+  function extractAnchors(checkContent) {
+    if (!checkContent) return [];
+    const anchors = [];
+    checkContent.split("\n").forEach(line => {
+      if (isConfigLikeLine(line)) {
+        const words = line.trim().split(/\s+/);
+        anchors.push(words.length > 1 ? words.slice(0, 2).join(" ") : words[0]);
+      }
+    });
+    const seen = new Set(), out = [];
+    anchors.forEach(a => {
+      const key = a.toLowerCase();
+      if (!seen.has(key)) { seen.add(key); out.push(a); }
+    });
+    return out;
+  }
+
+  function escapeRegex(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function findEvidenceLines(configLines, anchor, maxMatches) {
+    // Precompiled per-anchor regex is fine here (anchors are short and few);
+    // the real cost was re-splitting the whole config on every call, which
+    // the caller now avoids by passing a pre-split line array.
+    const re = new RegExp("^\\s*" + escapeRegex(anchor), "i");
+    const out = [];
+    for (const line of configLines) {
+      if (re.test(line)) {
+        out.push(line.trim());
+        if (out.length >= maxMatches) break;
+      }
+    }
+    return out;
+  }
+
+  function buildManualRuleList(cklbTemplate, disabledRiskyKeys) {
+    // One-time, config-independent: extract anchors for every rule NOT
+    // covered by RULE_CHECKS - plus any rule whose RULE_CHECKS entry exists
+    // but was disabled via the "uncertain checks" panel, which falls
+    // through to this same generic evidence bucket for this run.
+    const list = [];
+    (cklbTemplate.stigs || []).forEach(stig => {
+      (stig.rules || []).forEach(rule => {
+        const hasCheck = !!RULE_CHECKS[rule.rule_version];
+        const disabled = disabledRiskyKeys.has(rule.rule_version);
+        if (hasCheck && !disabled) return; // auto-filled and enabled, skip
+        const anchors = extractAnchors(rule.check_content);
+        list.push({
+          vid: rule.group_id, title: rule.rule_title, anchors,
+          discussion: rule.discussion, checkContent: rule.check_content, fixText: rule.fix_text,
+          disabledByToggle: hasCheck && disabled
+        });
+      });
+    });
+    return list;
+  }
+
+  function gatherEvidenceForDevice(manualRules, configLines, maxLinesPerRule) {
+    return manualRules.map(mr => {
+      const found = [];
+      const seen = new Set();
+      mr.anchors.forEach(anchor => {
+        findEvidenceLines(configLines, anchor, maxLinesPerRule).forEach(l => {
+          if (!seen.has(l)) { seen.add(l); found.push(l); }
+        });
+      });
+      return {
+        vid: mr.vid, title: mr.title, lines: found.slice(0, maxLinesPerRule),
+        discussion: mr.discussion, checkContent: mr.checkContent, fixText: mr.fixText,
+        disabledByToggle: mr.disabledByToggle
+      };
+    });
+  }
+
+  // -------------------------------------------------------------------
   // Rule checks — keyed by the cklb's stable "rule_version" (STIG ID)
   // -------------------------------------------------------------------
   const RULE_CHECKS = {
 
     "CISC-ND-000010": (cfg) => {
-      const sessionLimit = /^\s*session-limit\s+\d+/im.test(cfg);
-      const vtyRestricted = /^\s*transport input\s+none/im.test(cfg);
-      const httpLimited = /^ip http max-connections\s+\d+/im.test(cfg);
-      if (sessionLimit || vtyRestricted || httpLimited) {
-        return { match: true, detail: "Found session-limit / restricted vty transport / ip http max-connections in config. Verify the actual number matches your org's approved limit." };
+      // Evaluate the restriction inside the actual "line vty" block context,
+      // not "does session-limit/transport input none/ip http max-connections
+      // appear ANYWHERE in the config" - a session-limit under "line aux 0"
+      // used to be able to satisfy this check even with wide-open VTY access.
+      const vtyBlocks = parseLineBlocks(cfg).filter(b => /^line\s+vty\b/i.test(b.header));
+      const httpMatch = cfg.match(/^ip http max-connections\s+(\d+)/im);
+      const httpNote = httpMatch ? ` 'ip http max-connections ${httpMatch[1]}' is also set.` : "";
+
+      if (vtyBlocks.length === 0) {
+        return {
+          status: "manual", confidence: "high",
+          detail: "No 'line vty' block(s) found to evaluate for session-limit / transport input restrictions." + httpNote,
+          evidence: []
+        };
       }
-      return { match: false, detail: "No session-limit, restricted 'transport input none' vty line, or 'ip http max-connections' found." };
+
+      const req = REQUIREMENTS["CISC-ND-000010"] || {};
+      const evidence = [];
+      let allRestricted = true;
+      let sawUnboundedValue = false;
+
+      vtyBlocks.forEach(b => {
+        const body = b.lines.join("\n");
+        const sessLimitMatch = body.match(/^\s*session-limit\s+(\d+)/im);
+        const noTransport = /^\s*transport input\s+none/im.test(body);
+        if (noTransport) {
+          evidence.push(`${b.header}: transport input none`);
+          return;
+        }
+        if (sessLimitMatch) {
+          const val = parseInt(sessLimitMatch[1], 10);
+          if (req.maxSessionLimit != null && val > req.maxSessionLimit) {
+            allRestricted = false;
+            evidence.push(`${b.header}: session-limit ${val} (exceeds required ${req.maxSessionLimit})`);
+          } else if (req.maxSessionLimit == null) {
+            sawUnboundedValue = true;
+            evidence.push(`${b.header}: session-limit ${val} (no fixed ceiling stated in this rule's check text - verify against your org's approved limit)`);
+          } else {
+            evidence.push(`${b.header}: session-limit ${val} (<= required ${req.maxSessionLimit})`);
+          }
+        } else {
+          allRestricted = false;
+          evidence.push(`${b.header}: no session-limit set and transport input is not 'none'`);
+        }
+      });
+
+      if (!allRestricted) {
+        return { match: false, confidence: "high", detail: "One or more 'line vty' block(s) are not restricted:" + httpNote, evidence };
+      }
+      if (sawUnboundedValue) {
+        return {
+          status: "manual", confidence: "medium",
+          detail: "Every 'line vty' block has an explicit restriction, but this rule's check text doesn't mandate a specific session-limit ceiling - verify the configured value(s) against your organization's approved limit." + httpNote,
+          evidence
+        };
+      }
+      return { match: true, confidence: "high", detail: "All 'line vty' block(s) are restricted (session-limit within requirement or transport input none)." + httpNote, evidence };
     },
 
     "CISC-ND-000160": (cfg) => {
-      if (/^banner login/im.test(cfg)) {
-        return { match: true, detail: "'banner login' block is configured. Manually verify the banner text matches the required DoD notice-and-consent wording." };
+      // Asymmetric confidence: a COMPLETELY missing banner is an unambiguous
+      // finding - no login banner is definitely wrong. But the actual DISA-
+      // mandated banner text is long, specific, and legally significant, so
+      // presence of "banner login" alone doesn't prove the TEXT is correct -
+      // that needs a human to actually read it. Auto-fail the clear case,
+      // defer the ambiguous case to manual review with the banner text
+      // extracted for easy comparison.
+      //
+      // Cisco's "banner login <delimiter>" syntax uses a delimiter CHARACTER
+      // (or short token - commonly "^", sometimes "^C", "%", "#", etc.) that
+      // appears both right after "banner login" and again alone on its own
+      // line to close the banner. The body text in between is normally NOT
+      // indented - unlike line/interface sub-blocks elsewhere in an IOS
+      // config. An earlier version of this check assumed indentation and
+      // stopped at the very first (unindented) body line, so real banners
+      // extracted as empty text. Find the actual delimiter token and use it
+      // to locate the true end of the banner instead of guessing from
+      // indentation.
+      const open = cfg.match(/^banner login\s+(\S+)\r?\n/im);
+      if (!open) {
+        return { match: false, confidence: "high", detail: "No 'banner login' statement found in configuration." };
       }
-      return { match: false, detail: "No 'banner login' statement found in configuration." };
+      const delim = open[1];
+      const afterOpen = cfg.slice(open.index + open[0].length);
+      const bodyLines = afterOpen.split(/\r?\n/);
+      const closeIdx = bodyLines.findIndex(line => line.trim() === delim);
+      const bannerLines = closeIdx === -1 ? bodyLines.slice(0, 5) : bodyLines.slice(0, closeIdx);
+      let bannerText = bannerLines.map(l => l.trim()).filter(Boolean).join(" / ");
+      if (bannerText.length > 200) bannerText = bannerText.slice(0, 200) + "...";
+      const closeNote = closeIdx === -1 ? " (closing delimiter not found - showing the first few lines only)" : "";
+      return {
+        status: "manual", confidence: "medium",
+        detail: "'banner login' is configured - verify the exact text matches the DoD-mandated Standard Mandatory Notice and Consent wording (this cannot be verified by pattern matching alone)." + closeNote,
+        evidence: [`banner login text: "${bannerText}"`]
+      };
     },
 
-    "CISC-ND-000470": (cfg) => {
-      const bad = ["boot network", "ip boot server", "ip bootp server", "ip dns server",
-        "ip identd", "ip finger", "ip http server", "ip rcmd rcp-enable",
-        "ip rcmd rsh-enable", "service config", "service finger",
-        "service tcp-small-servers", "service udp-small-servers"];
-      const found = bad.filter(svc => new RegExp("^\\s*" + svc + "\\s*$", "im").test(cfg));
+    "CISC-ND-000470": (cfg, cc, rule) => {
+      const bad = PROHIBITED_SERVICES.services;
+      // Best-effort cross-check against the actual loaded STIG's check text
+      // for this rule: if a service in our table doesn't even appear in
+      // check_content, flag it so a stale hardcoded list doesn't silently
+      // diverge from a revised STIG without anyone noticing.
+      const checkText = (rule && rule.check_content) ? rule.check_content.toLowerCase() : null;
+      const untethered = checkText ? bad.filter(svc => !checkText.includes(svc.toLowerCase())) : [];
+      const staleNote = untethered.length
+        ? ` Note: ${untethered.length} of the services this checker looks for (${untethered.join(", ")}) don't appear in this rule's own check text - verify this list is still current for the loaded STIG revision.`
+        : "";
+      const found = bad.filter(svc => new RegExp("^\\s*" + escapeRegex(svc) + "\\b", "im").test(cfg));
       if (found.length === 0) {
-        return { match: true, detail: "None of the unnecessary/non-secure services checked were found enabled." };
+        return { match: true, confidence: "high", detail: "None of the unnecessary/non-secure services checked were found enabled." + staleNote };
       }
-      return { match: false, detail: "Unnecessary service(s) still enabled: " + found.join(", ") };
+      return { match: false, confidence: "high", detail: "Unnecessary service(s) still enabled: " + found.join(", ") + staleNote };
     },
 
     "CISC-ND-000490": (cfg) => {
+      // Zero local accounts is an unambiguous finding - there's no
+      // account-of-last-resort at all. But MORE than one is not
+      // automatically a finding: dedicated service/break-glass accounts
+      // are common and can be authorized exceptions. Rather than guessing,
+      // surface exactly what was found and let a human confirm which
+      // account is the designated one and whether the rest are documented.
       const names = [...new Set(allMatches(cfg, /^username\s+(\S+)/im).map(m => m[1]))];
+      if (names.length === 0) {
+        return { match: false, confidence: "high", detail: "No local user accounts found in configuration; an account-of-last-resort is required." };
+      }
       if (names.length === 1) {
-        return { match: true, detail: `Exactly one local account configured: ${names[0]}. Manually confirm it is documented as the account-of-last-resort.` };
+        return {
+          status: "manual", confidence: "medium",
+          detail: `Exactly one local account configured (${names[0]}) - matches the minimal expected case, but confirming it's documented as the account-of-last-resort (and correctly placed in the authentication order) requires manual review.`,
+          evidence: [`username ${names[0]}`]
+        };
       }
-      return { match: false, detail: `Found ${names.length} local account(s): ${names.join(", ")}. Manual review required - multiple accounts may be justified but must be documented.` };
+      return {
+        status: "manual", confidence: "medium",
+        detail: `Found ${names.length} local account(s): ${names.join(", ")}. More than one account isn't automatically a finding - service/break-glass accounts can be authorized exceptions - but a human needs to verify which account is the designated account-of-last-resort and whether the additional accounts are documented/authorized.`,
+        evidence: names.map(n => `username ${n}`)
+      };
     },
 
-    "CISC-ND-000550": (cfg, cc) => {
-      if (!cc) return { match: false, detail: "No 'aaa common-criteria policy' block found in configuration." };
-      const m = cc.match(/^\s*min-length\s+(\d+)/im);
-      if (m) {
-        const len = parseInt(m[1], 10);
-        return len >= 15
-          ? { match: true, detail: `Common-criteria policy min-length is ${len} (>= 15).` }
-          : { match: false, detail: `Common-criteria policy min-length is ${len} (< 15 required).` };
-      }
-      return { match: false, detail: "No 'min-length' setting found in the common-criteria policy block." };
-    },
-
-    "CISC-ND-000570": (cfg, cc) => ccCheck(cc, "upper-case"),
-    "CISC-ND-000580": (cfg, cc) => ccCheck(cc, "lower-case"),
-    "CISC-ND-000590": (cfg, cc) => ccCheck(cc, "numeric-count"),
-    "CISC-ND-000600": (cfg, cc) => ccCheck(cc, "special-case"),
-
-    "CISC-ND-000610": (cfg, cc) => {
-      if (!cc) return { match: false, detail: "No 'aaa common-criteria policy' block found in configuration." };
-      const m = cc.match(/^\s*char-changes\s+(\d+)/im);
-      if (m) {
-        const n = parseInt(m[1], 10);
-        return n >= 8
-          ? { match: true, detail: `Common-criteria policy char-changes is ${n} (>= 8).` }
-          : { match: false, detail: `Common-criteria policy char-changes is ${n} (< 8 required).` };
-      }
-      return { match: false, detail: "No 'char-changes' setting found in the common-criteria policy block." };
-    },
+    "CISC-ND-000550": (cfg, cc) => ccCheckByRule(cc, "CISC-ND-000550"),
+    "CISC-ND-000570": (cfg, cc) => ccCheckByRule(cc, "CISC-ND-000570"),
+    "CISC-ND-000580": (cfg, cc) => ccCheckByRule(cc, "CISC-ND-000580"),
+    "CISC-ND-000590": (cfg, cc) => ccCheckByRule(cc, "CISC-ND-000590"),
+    "CISC-ND-000600": (cfg, cc) => ccCheckByRule(cc, "CISC-ND-000600"),
+    "CISC-ND-000610": (cfg, cc) => ccCheckByRule(cc, "CISC-ND-000610"),
 
     "CISC-ND-000620": (cfg) => {
+      // See RULE_METADATA["CISC-ND-000620"] for why Type 5 doesn't fail here.
+      const rationale = RULE_METADATA["CISC-ND-000620"].rationale;
       const encSvc = /^service password-encryption/im.test(cfg);
-      const encSecret = /^enable secret/im.test(cfg);
+      const secretMatch = cfg.match(/^enable secret\s+(\d+)\s/im);
+      const encSecret = !!secretMatch;
       const weakEnable = /^enable password/im.test(cfg) && !/^enable password\s+secret/im.test(cfg);
       if (encSvc && encSecret && !weakEnable) {
-        return { match: true, detail: "'service password-encryption' and 'enable secret' are configured; no weak 'enable password' found." };
+        const hashType = secretMatch[1];
+        const note = hashType === "5" ? ` (Type 5/MD5 - ${rationale})` : ` (Type ${hashType})`;
+        return { match: true, confidence: "high", detail: `'service password-encryption' and 'enable secret' are configured; no weak 'enable password' found${note}.`, evidence: [`enable secret ${hashType} ...`] };
       }
       const missing = [];
       if (!encSvc) missing.push("service password-encryption");
       if (!encSecret) missing.push("enable secret");
       if (weakEnable) missing.push("weak 'enable password' is present");
-      return { match: false, detail: "Password encryption issue(s): " + missing.join("; ") };
+      return { match: false, confidence: "high", detail: "Password encryption issue(s): " + missing.join("; ") };
     },
 
     "CISC-ND-000720": (cfg) => {
-      const timeouts = allMatches(cfg, /^\s*exec-timeout\s+(\d+)\s+(\d+)/im);
-      if (timeouts.length === 0) {
-        return { match: false, detail: "No 'exec-timeout' statements found on any line." };
+      // Evaluate exec-timeout per line con/vty BLOCK using the shared IOS
+      // hierarchy parser, not a single regex's lookahead guessing where a
+      // block ends - handles split vty ranges (0 4 / 5 15) and other
+      // layouts uniformly. A block with no exec-timeout at all defaults to
+      // a longer Cisco default and is just as much a finding as one
+      // explicitly set too high.
+      const blocks = parseLineBlocks(cfg).filter(b => /^line\s+(con|vty)\b/i.test(b.header));
+      if (blocks.length === 0) {
+        return { match: false, confidence: "high", detail: "No 'line con' or 'line vty' blocks found to evaluate." };
       }
       const tooLong = [];
-      timeouts.forEach(t => {
-        const min = parseInt(t[1], 10), sec = parseInt(t[2], 10);
-        if (min > 5 || (min === 0 && sec === 0)) tooLong.push(`${min}:${sec}`);
+      const evidence = [];
+      let missing = 0;
+      blocks.forEach(b => {
+        const body = b.lines.join("\n");
+        const m = body.match(/^\s*exec-timeout\s+(\d+)\s+(\d+)/im);
+        if (m) {
+          const min = parseInt(m[1], 10), sec = parseInt(m[2], 10);
+          evidence.push(`${b.header}: exec-timeout ${min} ${sec}`);
+          if (min > 5 || (min === 0 && sec === 0)) tooLong.push(`${b.header} (${min}:${sec})`);
+        } else {
+          missing++;
+          evidence.push(`${b.header}: no exec-timeout set`);
+        }
       });
-      if (tooLong.length === 0) {
-        return { match: true, detail: `All ${timeouts.length} exec-timeout statement(s) found are <= 5 minutes.` };
+      if (tooLong.length === 0 && missing === 0) {
+        return { match: true, confidence: "high", detail: `All ${blocks.length} line con/vty block(s) have exec-timeout configured <= 5 minutes.`, evidence };
       }
-      return { match: false, detail: `Found exec-timeout value(s) exceeding 5 minutes or disabled (0 0): ${tooLong.join(", ")}. Verify this applies to con/vty lines.` };
+      const parts = [];
+      if (missing > 0) parts.push(`${missing} block(s) with no exec-timeout at all`);
+      if (tooLong.length > 0) parts.push(`exceeding 5 min or disabled: ${tooLong.join(", ")}`);
+      return { match: false, confidence: "high", detail: "Issue(s): " + parts.join("; ") + ".", evidence };
     },
 
     "CISC-ND-001030": (cfg) => {
-      const servers = allMatches(cfg, /^ntp server\s+(\S+)/im).map(m => m[1]);
-      if (servers.length >= 2) {
-        return { match: true, detail: `NTP server(s) configured: ${servers.join(", ")} (redundant sources present).` };
-      } else if (servers.length === 1) {
-        return { match: false, detail: `Only one NTP server configured (${servers[0]}); a redundant/secondary source is required.` };
+      // Dedupe - two lines pointing at the same server IP isn't redundancy.
+      const servers = parseNtpServers(cfg);
+      const uniqueAddrs = [...new Set(servers.map(s => s.address))];
+      const evidence = servers.map(s => s.raw);
+      if (uniqueAddrs.length >= 2) {
+        return { match: true, confidence: "high", detail: `${uniqueAddrs.length} unique NTP server(s) configured: ${uniqueAddrs.join(", ")} (at least two unique sources present).`, evidence };
+      } else if (uniqueAddrs.length === 1) {
+        return { match: false, confidence: "high", detail: `Only one unique NTP server configured (${uniqueAddrs[0]}); a redundant/secondary source is required.`, evidence };
       }
-      return { match: false, detail: "No 'ntp server' statement found in configuration." };
+      return { match: false, confidence: "high", detail: "No 'ntp server' statement found in configuration." };
     },
 
     "CISC-ND-001150": (cfg) => {
-      const authEnabled = /^ntp authenticate/im.test(cfg);
-      const hasKey = /^ntp authentication-key\s+\d+\s+(md5|sha1|sha2)/im.test(cfg);
-      const trustedKey = /^ntp trusted-key\s+\d+/im.test(cfg);
-      const serverKeyed = /^ntp server\s+\S+\s+key\s+\d+/im.test(cfg);
-      if (authEnabled && hasKey && trustedKey && serverKeyed) {
-        return { match: true, detail: "NTP authentication is fully configured (ntp authenticate + authentication-key + trusted-key + keyed server line)." };
+      // It's not enough for "ntp authenticate", "ntp authentication-key",
+      // "ntp trusted-key", and "ntp server ... key" to each exist somewhere -
+      // they have to reference the SAME key ID to actually form a working
+      // authentication chain. Three independently-present but mismatched
+      // key IDs (e.g. key 1 configured, key 2 trusted, server uses key 3)
+      // means NTP auth is effectively broken despite every line "existing."
+      //
+      // CRITICAL: this check's own text states "Cisco IOS is limited to MD5
+      // for NTP authentication, and incurs a PERMANENT FINDING as it is not
+      // FIPS compliant." A correctly-chained MD5 key is NOT compliant on
+      // IOS - it's explicitly, permanently a finding per DISA's own words.
+      // Only a SHA-based chain (where the platform supports it) can pass.
+      //
+      // Strengthened: this used to pass as soon as ONE server had a working
+      // authenticated chain, even if OTHER configured NTP servers had no key
+      // at all. Every configured server that's expected to participate in
+      // synchronization must itself be authenticated - so now every server
+      // from parseNtpServers() is checked individually.
+      const authEnabled = /^ntp authenticate\s*$/im.test(cfg);
+      const keyEntries = allMatches(cfg, /^ntp authentication-key\s+(\d+)\s+(md5|sha1|sha2)\s+/im).map(m => ({ id: m[1], algo: m[2].toLowerCase() }));
+      const trustedIds = new Set(allMatches(cfg, /^ntp trusted-key\s+(\d+)\s*$/im).map(m => m[1]));
+      const keyById = new Map(keyEntries.map(k => [k.id, k.algo]));
+      const servers = parseNtpServers(cfg);
+
+      if (servers.length === 0) {
+        return { match: false, confidence: "high", detail: "No 'ntp server' statement found in configuration." };
       }
+      if (!authEnabled) {
+        return { match: false, confidence: "high", detail: "'ntp authenticate' is not enabled globally.", evidence: servers.map(s => s.raw) };
+      }
+
+      const unauthenticated = [];
+      const weakMd5 = [];
+      const compliant = [];
+      servers.forEach(s => {
+        if (!s.key) {
+          unauthenticated.push(`${s.raw} (no key clause)`);
+          return;
+        }
+        if (!trustedIds.has(s.key) || !keyById.has(s.key)) {
+          unauthenticated.push(`${s.raw} (key ${s.key} is not both defined via 'ntp authentication-key' and trusted via 'ntp trusted-key')`);
+          return;
+        }
+        const algo = keyById.get(s.key);
+        if (algo === "md5") {
+          weakMd5.push(`${s.raw} (key ${s.key}, MD5)`);
+        } else {
+          compliant.push(`${s.raw} (key ${s.key}, ${algo})`);
+        }
+      });
+
+      if (unauthenticated.length > 0) {
+        return {
+          match: false, confidence: "high",
+          detail: `Every configured NTP server must use a valid, trusted authentication key. Server(s) that don't: ${unauthenticated.join("; ")}.`,
+          evidence: [...unauthenticated, ...weakMd5, ...compliant]
+        };
+      }
+      if (weakMd5.length > 0) {
+        return {
+          match: false, confidence: "high",
+          detail: `Every configured server references a defined and trusted key, but ${weakMd5.length} of them use MD5 - per this rule's own check text, Cisco IOS is limited to MD5 for NTP auth and that is explicitly a PERMANENT FINDING (not FIPS-compliant), regardless of correct configuration: ${weakMd5.join("; ")}.`,
+          evidence: [...weakMd5, ...compliant]
+        };
+      }
+      return {
+        match: true, confidence: "high",
+        detail: `NTP authentication is fully configured with a FIPS-compliant algorithm for every configured server: ${compliant.join("; ")}.`,
+        evidence: compliant
+      };
+    },
+
+    // ---- Newly automated rules (added after the manual-review evidence
+    // feature made it easy to see which of the remaining rules are simple
+    // deterministic presence/threshold checks vs. ones that genuinely need
+    // a human, live device output, or external data) ----
+
+    "CISC-ND-000150": (cfg) => {
+      // check_content's actual finding criterion is only "enforces the limit
+      // of three consecutive invalid logon attempts" - the block-for/within
+      // durations in DISA's example are illustrative, not independently
+      // mandated minimums. Validating only "attempts" (not inventing a
+      // required 900/120) is deliberate, not an oversight - but the other
+      // two values are surfaced as evidence so a reviewer can sanity-check
+      // them against their own org's policy.
+      const req = REQUIREMENTS["CISC-ND-000150"];
+      const m = cfg.match(/^login block-for\s+(\d+)\s+attempts\s+(\d+)\s+within\s+(\d+)/im);
+      if (!m) return { match: false, confidence: "high", detail: "No 'login block-for ... attempts N within M' statement found." };
+      const [, blockFor, attemptsStr, within] = m;
+      const attempts = parseInt(attemptsStr, 10);
+      const evidence = [`login block-for ${blockFor} attempts ${attempts} within ${within}`];
+      return attempts <= req.maxAttempts
+        ? { match: true, confidence: "high", detail: `login block-for configured with attempts=${attempts} (<= ${req.maxAttempts}, the only value this rule's check text explicitly mandates). Block duration (${blockFor}s) and window (${within}s) are shown for reference - verify they're reasonable for your environment.`, evidence }
+        : { match: false, confidence: "high", detail: `login block-for configured with attempts=${attempts} (> ${req.maxAttempts} allowed consecutive failures).`, evidence };
+    },
+
+    "CISC-ND-000210": (cfg) => {
+      return /^logging userinfo/im.test(cfg)
+        ? { match: true, confidence: "high", detail: "'logging userinfo' is configured (logs privilege escalation)." }
+        : { match: false, confidence: "high", detail: "No 'logging userinfo' statement found." };
+    },
+
+    "CISC-ND-000280": (cfg) => {
+      return /^service timestamps log datetime/im.test(cfg)
+        ? { match: true, confidence: "high", detail: "'service timestamps log datetime' is configured." }
+        : { match: false, confidence: "high", detail: "No 'service timestamps log datetime' statement found." };
+    },
+
+    "CISC-ND-000980": (cfg) => {
+      // No minimum buffer size is specified anywhere in check_content
+      // ("xxxxxxxx" in DISA's example is a placeholder, not a number) -
+      // presence-only is correct here, not a shortcut. Size is still
+      // surfaced as evidence for the reviewer's own sanity check.
+      const m = cfg.match(/^logging buffered\s+(\d+)/im);
+      return m
+        ? { match: true, confidence: "high", detail: `Logging buffer size configured: ${m[1]} bytes. (This rule's check text specifies no minimum size - presence is the only stated requirement.)`, evidence: [`logging buffered ${m[1]}`] }
+        : { match: false, confidence: "high", detail: "No 'logging buffered <size>' statement found." };
+    },
+
+    "CISC-ND-001260": (cfg) => {
+      const fail = /^login on-failure log/im.test(cfg);
+      const success = /^login on-success log/im.test(cfg);
+      if (fail && success) return { match: true, detail: "Both 'login on-failure log' and 'login on-success log' are configured." };
       const missing = [];
-      if (!authEnabled) missing.push("ntp authenticate");
-      if (!hasKey) missing.push("ntp authentication-key <id> md5/sha");
-      if (!trustedKey) missing.push("ntp trusted-key");
-      if (!serverKeyed) missing.push("ntp server ... key <id>");
-      return { match: false, detail: "NTP authentication incomplete - missing: " + missing.join(", ") };
-    }
+      if (!fail) missing.push("login on-failure log");
+      if (!success) missing.push("login on-success log");
+      return { match: false, detail: "Missing: " + missing.join(", ") };
+    },
+
+    "CISC-ND-001370": (cfg) => {
+      // "aaa authentication login default local" plus two radius/tacacs-
+      // server lines would previously pass, even though "local" alone means
+      // the servers aren't actually being used as the auth method. Require
+      // at least one aaa authentication login line to actually invoke
+      // "group radius" or "group tacacs+", not just exist in any form.
+      //
+      // Strengthened further: 1 TACACS+ server + 1 RADIUS server used to
+      // satisfy a ">= 2 servers" threshold even though that isn't redundant
+      // for EITHER method individually. Identify which method(s) the login
+      // line(s) actually invoke and require >= 2 servers of THAT type. The
+      // full method-list line is preserved verbatim as evidence so the
+      // configured authentication ORDER (e.g. "group tacacs+ local" vs
+      // "local group tacacs+") is visible to a reviewer, not just presence.
+      //
+      // Server counting uses parseAaaServers(), which recognizes BOTH the
+      // legacy "tacacs-server host <ip>" line syntax AND the modern
+      // "tacacs server NAME" / "address ipv4 <ip>" block syntax (same for
+      // radius) - a device using only the modern block form used to be
+      // counted as having zero servers of that type.
+      const radiusServers = parseAaaServers(cfg, "radius");
+      const tacacsServers = parseAaaServers(cfg, "tacacs");
+      // De-dupe by address when one is known; entries with no discoverable
+      // address (a block with no "address ipv4/ipv6" line) each still count
+      // individually, since they can't be proven to be duplicates of anything.
+      function uniqueCount(servers) {
+        const seenAddrs = new Set();
+        let count = 0;
+        servers.forEach(s => {
+          if (s.address) {
+            if (seenAddrs.has(s.address)) return;
+            seenAddrs.add(s.address);
+          }
+          count++;
+        });
+        return count;
+      }
+      const radiusCount = uniqueCount(radiusServers);
+      const tacacsCount = uniqueCount(tacacsServers);
+      const aaaModel = /^aaa new-model/im.test(cfg);
+      const aaaLoginLines = allMatches(cfg, /^aaa authentication login\s+.*$/im).map(m => m[0].trim());
+      const groupLines = aaaLoginLines.filter(l => /group\s+(radius|tacacs\+?)/i.test(l));
+
+      if (!aaaModel) {
+        return { match: false, confidence: "high", detail: "'aaa new-model' is not configured.", evidence: aaaLoginLines };
+      }
+      if (groupLines.length === 0) {
+        return {
+          match: false, confidence: "high",
+          detail: "No 'aaa authentication login' line references a radius/tacacs server group - servers may be configured but unused (e.g. login method is 'local' only).",
+          evidence: aaaLoginLines
+        };
+      }
+
+      const typesUsed = new Set();
+      groupLines.forEach(l => {
+        const gm = l.match(/group\s+(radius|tacacs\+?)/i);
+        if (gm) typesUsed.add(gm[1].toLowerCase().replace("+", ""));
+      });
+
+      const evidence = [...groupLines];
+      const problems = [];
+      let anyTypeSatisfied = false;
+      if (typesUsed.has("radius")) {
+        evidence.push(...radiusServers.map(s => s.raw));
+        if (radiusCount >= 2) anyTypeSatisfied = true;
+        else problems.push(`RADIUS is used for login but only ${radiusCount} unique radius server(s) found (need >= 2 of the SAME type for redundancy)`);
+      }
+      if (typesUsed.has("tacacs")) {
+        evidence.push(...tacacsServers.map(s => s.raw));
+        if (tacacsCount >= 2) anyTypeSatisfied = true;
+        else problems.push(`TACACS+ is used for login but only ${tacacsCount} unique tacacs server(s) found (need >= 2 of the SAME type for redundancy)`);
+      }
+
+      if (anyTypeSatisfied && problems.length === 0) {
+        return {
+          match: true, confidence: "high",
+          detail: `aaa new-model is present and the login method list invokes ${[...typesUsed].join(" and ")}, backed by >= 2 server(s) of that type. Configured authentication order: ${groupLines.join(" | ")}.`,
+          evidence
+        };
+      }
+      return { match: false, confidence: "high", detail: "Issue(s): " + problems.join("; "), evidence };
+    },
+
+    "CISC-ND-001450": (cfg) => {
+      // Positive pattern instead of a growing negative-lookahead exclusion
+      // list, and now handles the optional "vrf <name>" clause Cisco allows
+      // between "logging host" and the target. IPv6 addresses and FQDNs
+      // already match \S+ without any extra handling needed.
+      const hostForm = allMatches(cfg, /^logging host\s+(?:vrf\s+\S+\s+)?(\S+)/im).map(m => m[1]);
+      const bareForm = allMatches(cfg, /^logging\s+(?:vrf\s+\S+\s+)?((?!buffered|trap|userinfo|persistent|enable|source-interface|facility|synchronous|monitor|console|history|rate-limit|on|off)\S+)$/im).map(m => m[1]);
+      const servers = [...new Set([...hostForm, ...bareForm])];
+      return servers.length >= 2
+        ? { match: true, confidence: "medium", detail: `${servers.length} syslog server(s) configured: ${servers.join(", ")}.`, evidence: servers.map(s => `logging ${s}`) }
+        : { match: false, confidence: "medium", detail: `Only ${servers.length} syslog server(s) found (${servers.join(", ") || "none"}); at least 2 required for redundancy. Note: this regex may not catch every valid Cisco logging syntax variant.` };
+    },
+
+    "CISC-ND-001200": (cfg) => {
+      // Three states instead of two: an explicit secure restriction passes,
+      // an explicit weak algorithm fails, but the ABSENCE of any explicit
+      // restriction is neither - modern IOS-XE secure defaults may already
+      // exclude weak MACs, and that can't be confirmed from a running-config
+      // alone, so it goes to manual review instead of an automatic "Open".
+      const verOk = /^ip ssh version 2/im.test(cfg);
+      if (!verOk) return { match: false, confidence: "high", detail: "SSH is not explicitly set to version 2." };
+      const m = cfg.match(/^ip ssh server algorithm mac\s+(.+)$/im);
+      if (!m) {
+        return {
+          status: "manual", confidence: "medium",
+          detail: "SSH version 2 is set, but no explicit 'ip ssh server algorithm mac' restriction was found. Modern IOS-XE secure defaults may already exclude weak MACs, but that can't be confirmed from the running-config alone - verify the platform's default MAC set or an active session's negotiated algorithm.",
+          evidence: []
+        };
+      }
+      const algos = m[1].trim().split(/\s+/);
+      const weak = algos.filter(a => /md5|hmac-sha1(?!-2)|^sha1$/i.test(a));
+      if (weak.length > 0) return { match: false, confidence: "high", detail: `Weak MAC algorithm(s) allowed: ${weak.join(", ")}.`, evidence: [`ip ssh server algorithm mac ${algos.join(" ")}`] };
+      return { match: true, confidence: "high", detail: `SSH MAC restricted to: ${algos.join(", ")}.`, evidence: [`ip ssh server algorithm mac ${algos.join(" ")}`] };
+    },
+
+    "CISC-ND-001210": (cfg) => {
+      // Same three-state logic as the MAC check above.
+      const verOk = /^ip ssh version 2/im.test(cfg);
+      if (!verOk) return { match: false, confidence: "high", detail: "SSH is not explicitly set to version 2." };
+      const m = cfg.match(/^ip ssh server algorithm encryption\s+(.+)$/im);
+      if (!m) {
+        return {
+          status: "manual", confidence: "medium",
+          detail: "SSH version 2 is set, but no explicit 'ip ssh server algorithm encryption' restriction was found. Modern IOS-XE secure defaults may already exclude weak ciphers, but that can't be confirmed from the running-config alone - verify the platform's default cipher set or an active session's negotiated algorithm.",
+          evidence: []
+        };
+      }
+      const algos = m[1].trim().split(/\s+/);
+      const weak = algos.filter(a => /(^|-)(3des|des)(-|$)|cbc/i.test(a));
+      if (weak.length > 0) return { match: false, confidence: "high", detail: `Weak/disallowed cipher(s) allowed: ${weak.join(", ")}.`, evidence: [`ip ssh server algorithm encryption ${algos.join(" ")}`] };
+      return { match: true, confidence: "high", detail: `SSH encryption restricted to: ${algos.join(", ")}.`, evidence: [`ip ssh server algorithm encryption ${algos.join(" ")}`] };
+    },
+
+    // CISC-ND-000380/000390/000460 all share the identical technical check
+    // (file system privilege level, conditional on persistent logging being
+    // enabled at all) - they cover different NIST control families but the
+    // config-side verification is the same.
+    "CISC-ND-000380": (cfg) => checkFilePrivilege(cfg),
+    "CISC-ND-000390": (cfg) => checkFilePrivilege(cfg),
+    "CISC-ND-000460": (cfg) => checkFilePrivilege(cfg)
   };
 
-  function ccCheck(cc, keyword) {
-    if (!cc) return { match: false, detail: "No 'aaa common-criteria policy' block found in configuration." };
-    const m = cc.match(new RegExp("^\\s*" + keyword + "\\s+(\\d+)", "im"));
-    if (m && parseInt(m[1], 10) >= 1) {
-      return { match: true, detail: `Common-criteria policy requires ${keyword} ${m[1]} character(s).` };
+  // Fill in the real count now that RULE_CHECKS is fully defined, rather
+  // than hand-maintaining a number in the HTML that goes stale the moment
+  // a check is added or removed.
+  const subtitleEl = document.getElementById("subtitleText");
+  if (subtitleEl) {
+    const n = Object.keys(RULE_CHECKS).length;
+    subtitleEl.textContent = `Cisco IOS Switch NDM STIG — one template checklist, any number of device configs, matched against ${n} rule checks entirely in your browser. Nothing is uploaded anywhere.`;
+  }
+
+  function checkFilePrivilege(cfg) {
+    const persistent = /^logging persistent url/im.test(cfg);
+    if (!persistent) {
+      return { status: "not_applicable", detail: "Persistent logging is not configured, so this control does not apply." };
     }
-    return { match: false, detail: `No '${keyword}' requirement (>=1) found in the common-criteria policy block.` };
+    const m = cfg.match(/^file privilege\s+(\d+)/im);
+    if (!m) {
+      return { match: true, detail: "Persistent logging is enabled; no 'file privilege' override found, so the secure default (15) remains in effect." };
+    }
+    const priv = parseInt(m[1], 10);
+    return priv === 15
+      ? { match: true, detail: "Persistent logging is enabled; file privilege is explicitly set to 15 (default/secure)." }
+      : { match: false, detail: `Persistent logging is enabled; file privilege is set to ${priv} (weaker than the required 15).` };
+  }
+
+  // Generic common-criteria policy check driven entirely by CC_REQUIREMENTS -
+  // a STIG revision to one of these thresholds is now a one-line data edit
+  // instead of a hunt through six near-identical function bodies.
+  function ccCheckByRule(cc, ruleId) {
+    const req = CC_REQUIREMENTS[ruleId];
+    if (!req) throw new Error(`No CC_REQUIREMENTS entry defined for ${ruleId}`);
+    if (!cc) return { match: false, confidence: "high", detail: "No 'aaa common-criteria policy' block found in configuration." };
+    const m = cc.match(new RegExp("^\\s*" + escapeRegex(req.key) + "\\s+(\\d+)", "im"));
+    if (m) {
+      const val = parseInt(m[1], 10);
+      return val >= req.min
+        ? { match: true, confidence: "high", detail: `Common-criteria policy ${req.key} is ${val} (>= ${req.min} required).`, evidence: [`${req.key} ${val}`] }
+        : { match: false, confidence: "high", detail: `Common-criteria policy ${req.key} is ${val} (< ${req.min} required).`, evidence: [`${req.key} ${val}`] };
+    }
+    return { match: false, confidence: "high", detail: `No '${req.key}' setting (>= ${req.min}) found in the common-criteria policy block.` };
   }
 
   // -------------------------------------------------------------------
   // Run — process every config against a fresh copy of the template
   // -------------------------------------------------------------------
   document.getElementById("runBtn").addEventListener("click", () => {
+    // Defensive re-check: the template was validated on load, but guard
+    // here too in case it was mutated in ways validation wouldn't catch.
+    const structureError = validateCklbStructure(cklbTemplateData);
+    if (structureError) {
+      alert("Cannot run - invalid CKLB structure: " + structureError);
+      return;
+    }
+
     const deviceResults = [];
-    let grandNA = 0, grandOpen = 0, grandFilled = 0;
+    let grandNA = 0, grandOpen = 0, grandFilled = 0, grandErrors = 0;
+    let grandManualVerdict = 0, grandNotAutomated = 0;
+    const disabledRiskyKeys = getDisabledRiskyKeys();
+    const runTimestamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+
+    // Manual-review evidence anchors depend only on the template and which
+    // risky checks are disabled this run, so build this list once and
+    // reuse it for every device.
+    const parsedTemplate = JSON.parse(cklbTemplateText);
+    const manualRules = buildManualRuleList(parsedTemplate, disabledRiskyKeys);
+
+    // Dynamic, computed-from-the-actual-template counts for the transparency
+    // banner - never hardcode "35 rules" or "26 automated" in text, since
+    // that goes stale the moment a check is added or a different STIG's
+    // cklb is loaded.
+    let totalRuleCount = 0, hasCheckCount = 0;
+    const templateRuleIds = new Set();
+    (parsedTemplate.stigs || []).forEach(stig => (stig.rules || []).forEach(rule => {
+      totalRuleCount++;
+      templateRuleIds.add(rule.rule_version);
+      if (RULE_CHECKS[rule.rule_version]) hasCheckCount++;
+    }));
+    // Only count a "disabled via toggle" rule if it's actually present in
+    // THIS template - otherwise loading a CKLB that doesn't contain all of
+    // the risky-panel rule IDs could produce a disabledByToggle count (and
+    // therefore an "enabled this run" count) that doesn't match reality.
+    const applicableDisabledRisky = new Set(
+      [...disabledRiskyKeys].filter(id => templateRuleIds.has(id))
+    );
+    const ruleCounts = {
+      total: totalRuleCount,
+      withCheck: hasCheckCount,
+      disabledByToggle: applicableDisabledRisky.size,
+      neverAutomated: totalRuleCount - hasCheckCount
+    };
+
+    const usedOutputNames = new Map(); // base filename -> count seen so far, for collision-safe naming
 
     configFiles.forEach(cf => {
       const configText = cf.text;
       const ccBlock = getCcPolicyBlock(configText);
       const fallbackName = cf.name.replace(/\.[^.]+$/, "");
-      const deviceName = getDeviceName(configText, fallbackName);
+      const detectedHostname = getDeviceName(configText, null);
+      const deviceName = detectedHostname || fallbackName;
 
       // Fresh deep copy of the template for every device
       const cklb = JSON.parse(cklbTemplateText);
+      // Split once and reuse for the evidence grepper below - avoids
+      // re-splitting the whole config on every anchor of every manual rule.
+      const configLines = configText.split("\n");
 
-      let filled = 0, na = 0, open = 0;
+      let filled = 0, na = 0, open = 0, naOther = 0, errorCount = 0;
       const rows = [];
 
       (cklb.stigs || []).forEach(stig => {
         (stig.rules || []).forEach(rule => {
           const key = rule.rule_version;
-          const check = RULE_CHECKS[key];
+          // A rule with a RULE_CHECKS entry that's been unchecked in the
+          // "uncertain checks" panel is treated as if it had no automated
+          // check at all this run - it falls through to the manual-evidence
+          // pass below instead.
+          const check = disabledRiskyKeys.has(key) ? null : RULE_CHECKS[key];
           if (!check) return;
 
-          let result;
+          const meta = { title: rule.rule_title, discussion: rule.discussion, checkContent: rule.check_content, fixText: rule.fix_text };
+          let norm;
           try {
-            result = check(configText, ccBlock);
+            const raw = check(configText, ccBlock, rule);
+            if (raw == null) return; // this checker deliberately declined to adjudicate this run
+            norm = normalizeCheckResult(raw);
           } catch (err) {
-            console.warn("Check failed for", key, err);
+            // A crashing OR malformed-result check must never fail silently
+            // in a compliance tool - that's a rule nobody knows wasn't
+            // actually evaluated. Surface it as a visible manual-review
+            // item with the error message attached, both in the UI and in
+            // the exported file.
+            errorCount++;
+            rule.finding_details = "AUTOMATION ERROR - MANUAL REVIEW REQUIRED: " + err.message;
+            rows.push({ vid: rule.group_id, status: "error", detail: "Check threw an error: " + err.message, ...meta });
             return;
           }
-          if (!result) return;
 
-          rule.status = result.match ? "not_a_finding" : "open";
-          rule.finding_details = result.detail;
-          rule.comments = "Auto-filled by Cklb-AutoFill.html on " + new Date().toISOString().slice(0, 16).replace("T", " ") + " - verify before submitting.";
+          if (norm.statusKind === "manual") {
+            // Found something but can't confirm it's actually correct
+            // (banner text, documented account, etc) - leave the template's
+            // not_reviewed status untouched, just attach the evidence found.
+            const confPrefix = norm.confidence ? `[Confidence: ${norm.confidence.toUpperCase()}] ` : "";
+            rule.finding_details = confPrefix + "AUTOMATED CHECK RAN - FLAGGED FOR MANUAL REVIEW (not an adjudication): " + norm.detail +
+              (norm.evidence.length ? " | Evidence: " + norm.evidence.join(" | ") : "");
+            rows.push({ vid: rule.group_id, status: "manual", detail: norm.detail, confidence: norm.confidence, ...meta });
+            return;
+          }
+
+          // pass -> not_a_finding, fail -> open, not_applicable -> passed
+          // through as-is ("applies but fails" isn't the right frame there).
+          rule.status = norm.statusKind === "not_applicable" ? "not_applicable"
+            : (norm.statusKind === "pass" ? "not_a_finding" : "open");
+          const confPrefix = norm.confidence ? `[Confidence: ${norm.confidence.toUpperCase()}] ` : "";
+          rule.finding_details = confPrefix + norm.detail;
+          rule.comments = `Auto-filled by CKLB Auto-Fill v${TOOL_VERSION} on ${runTimestamp} UTC | Source config: ${cf.name} | Detected hostname: ${detectedHostname || "(none found - used config filename)"} - verify before submitting.`;
 
           filled++;
-          result.match ? na++ : open++;
-          rows.push({ vid: rule.group_id, match: result.match, detail: result.detail });
+          if (rule.status === "not_a_finding") na++;
+          else if (rule.status === "open") open++;
+          else naOther++;
+          rows.push({ vid: rule.group_id, status: rule.status, detail: norm.detail, confidence: norm.confidence, ...meta });
         });
       });
 
@@ -482,20 +1536,64 @@
         cklb.id = (crypto.randomUUID ? crypto.randomUUID() : fallbackUuid());
       }
 
+      // Persist evidence into finding_details for every manual-review rule
+      // (both the genuinely-manual ones and any disabled via the panel
+      // above) where something was actually found - so a reviewer opening
+      // this file later, without this tool open, still sees it. Status is
+      // deliberately left untouched (stays not_reviewed) - this is context,
+      // not an adjudication. Labeled explicitly as informational: an anchor
+      // match is a hint about where to look, not proof the requirement is met.
+      const manualEvidence = gatherEvidenceForDevice(manualRules, configLines, 6);
+      const evidenceByVid = new Map(manualEvidence.filter(m => m.lines.length > 0).map(m => [m.vid, m]));
+      (cklb.stigs || []).forEach(stig => {
+        (stig.rules || []).forEach(rule => {
+          const ev = evidenceByVid.get(rule.group_id);
+          if (!ev) return;
+          rule.finding_details = "POSSIBLE MATCHING CONFIGURATION LINES - INFORMATIONAL ONLY (not an adjudication - requires manual review): " + ev.lines.join(" | ");
+        });
+      });
+
+      // Distinguish "the tool evaluated this and a human needs to confirm
+      // it" (Manual Review) from "this rule never had an automated check
+      // run against it at all this run" (Not Automated) - they mean very
+      // different things to a reviewer scanning results across many devices.
+      const manualVerdictCount = rows.filter(r => r.status === "manual").length;
+      const notAutomatedCount = manualEvidence.length;
+      const manualTotal = manualVerdictCount + errorCount + notAutomatedCount;
+
       grandFilled += filled;
       grandNA += na;
       grandOpen += open;
+      grandErrors += errorCount;
+      grandManualVerdict += manualVerdictCount;
+      grandNotAutomated += notAutomatedCount;
+
+      // Collision-safe, sanitized output filename - two devices whose
+      // hostname (or fallback filename) sanitizes to the same string no
+      // longer silently overwrite each other inside the zip.
+      const sanitized = sanitizeFilename(deviceName);
+      const baseName = sanitized + "_filled.cklb";
+      let outputName = baseName;
+      if (usedOutputNames.has(baseName)) {
+        const n = usedOutputNames.get(baseName) + 1;
+        usedOutputNames.set(baseName, n);
+        outputName = `${sanitized}_${n}_filled.cklb`;
+      } else {
+        usedOutputNames.set(baseName, 1);
+      }
 
       deviceResults.push({
         deviceName,
-        outputName: deviceName + "_filled.cklb",
-        filled, na, open,
+        outputName,
+        filled, na, open, naOther, errorCount,
+        manualVerdictCount, notAutomatedCount, manualTotal,
         rows,
+        manualEvidence,
         cklbJson: JSON.stringify(cklb, null, 2)
       });
     });
 
-    renderResults(deviceResults, grandFilled, grandNA, grandOpen);
+    renderResults(deviceResults, grandFilled, grandNA, grandOpen, grandErrors, grandManualVerdict, grandNotAutomated, ruleCounts);
     prepareDownload(deviceResults);
   });
 
@@ -507,16 +1605,89 @@
     });
   }
 
-  function renderResults(deviceResults, grandFilled, grandNA, grandOpen) {
+  let expandCounter = 0;
+
+  function buildMetaHtml(meta) {
+    if (!meta) return "<em>No additional details available.</em>";
+    const parts = [];
+    if (meta.title) parts.push(`<dt>Rule title</dt><dd>${escapeHtml(meta.title)}</dd>`);
+    if (meta.discussion) parts.push(`<dt>Discussion</dt><dd>${escapeHtml(meta.discussion)}</dd>`);
+    if (meta.checkContent) parts.push(`<dt>Check text</dt><dd>${escapeHtml(meta.checkContent)}</dd>`);
+    if (meta.fixText) parts.push(`<dt>Fix text</dt><dd>${escapeHtml(meta.fixText)}</dd>`);
+    return parts.length ? `<dl>${parts.join("")}</dl>` : "<em>No additional details available.</em>";
+  }
+
+  function addExpandableRow(tbody, vidLabel, restCellsHtml, meta, colSpan) {
+    const id = "detail-" + (expandCounter++);
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="vid"><span class="vid-toggle"><span class="chevron">&#9656;</span>${escapeHtml(vidLabel)}</span></td>` + restCellsHtml;
+    tbody.appendChild(tr);
+
+    const detailTr = document.createElement("tr");
+    detailTr.className = "detail-row hidden";
+    const td = document.createElement("td");
+    td.colSpan = colSpan || 3;
+    td.innerHTML = buildMetaHtml(meta);
+    detailTr.appendChild(td);
+    tbody.appendChild(detailTr);
+
+    const toggle = tr.querySelector(".vid-toggle");
+    toggle.addEventListener("click", () => {
+      detailTr.classList.toggle("hidden");
+      toggle.classList.toggle("expanded");
+    });
+  }
+
+  function renderResults(deviceResults, grandFilled, grandNA, grandOpen, grandErrors, grandManualVerdict, grandNotAutomated, ruleCounts) {
     document.getElementById("results").classList.remove("hidden");
     document.getElementById("statDevices").textContent = deviceResults.length;
-    const avgFilled = deviceResults.length ? Math.round(grandFilled / deviceResults.length) : 0;
-    document.getElementById("statFilled").textContent = avgFilled;
+    document.getElementById("statFilled").textContent = grandFilled;
     document.getElementById("statNA").textContent = grandNA;
     document.getElementById("statOpen").textContent = grandOpen;
+    document.getElementById("statManual").textContent = grandManualVerdict;
+    document.getElementById("statNotAutomated").textContent = grandNotAutomated;
+    const errWrap = document.getElementById("statErrorWrap");
+    if (grandErrors > 0) {
+      errWrap.classList.remove("hidden");
+      document.getElementById("statErrors").textContent = grandErrors;
+    } else {
+      errWrap.classList.add("hidden");
+    }
+
+    // A prominent, non-blocking warning when any check crashed outright -
+    // these are the one category that genuinely means "something wasn't
+    // evaluated the way it should have been," distinct from ordinary
+    // manual-review items, so it gets called out above everything else.
+    const errorBanner = document.getElementById("errorBanner");
+    if (grandErrors > 0) {
+      errorBanner.classList.remove("hidden");
+      errorBanner.textContent = `⚠ ${grandErrors} AUTOMATION ERROR${grandErrors === 1 ? "" : "S"} — MANUAL REVIEW REQUIRED before submitting any affected checklist.`;
+    } else {
+      errorBanner.classList.add("hidden");
+    }
+
+    // Never let it be ambiguous how many rules in the template got no
+    // automated attention at all, computed live from the actual loaded
+    // cklb and current toggle state rather than a hardcoded number that
+    // goes stale the moment a check is added or a different STIG is loaded.
+    const banner = document.getElementById("rulesBanner");
+    banner.innerHTML = `<strong>${ruleCounts.total}</strong> total rules per device &middot; ` +
+      `<strong>${ruleCounts.withCheck - ruleCounts.disabledByToggle}</strong> have an automated check enabled this run &middot; ` +
+      (ruleCounts.disabledByToggle > 0 ? `<strong>${ruleCounts.disabledByToggle}</strong> disabled via "Uncertain checks" &middot; ` : "") +
+      `<strong>${ruleCounts.neverAutomated}</strong> have no automated check at all &middot; ` +
+      `<strong>0</strong> silently skipped - every rule either gets adjudicated, a manual-review verdict, or explicit evidence.`;
 
     const container = document.getElementById("deviceTables");
     container.innerHTML = "";
+
+    const STATUS_LABELS = {
+      not_a_finding: { cls: "na", label: "Not a Finding" },
+      open: { cls: "open", label: "Open" },
+      not_applicable: { cls: "manual", label: "Not Applicable" },
+      manual: { cls: "manual", label: "Manual Review" },
+      error: { cls: "error", label: "Automation Error" }
+    };
 
     deviceResults.forEach(dev => {
       const block = document.createElement("div");
@@ -524,23 +1695,69 @@
 
       const head = document.createElement("div");
       head.className = "device-head";
-      head.innerHTML = `<h3>${escapeHtml(dev.deviceName)}</h3><span class="counts">${dev.na} not a finding · ${dev.open} open</span>`;
+      const headParts = [`${dev.na} not a finding`, `${dev.open} open`, `${dev.manualVerdictCount} manual review`, `${dev.notAutomatedCount} not automated`];
+      if (dev.naOther) headParts.push(`${dev.naOther} not applicable`);
+      if (dev.errorCount) headParts.push(`${dev.errorCount} automation error${dev.errorCount === 1 ? "" : "s"}`);
+      head.innerHTML = `<h3>${escapeHtml(dev.deviceName)}</h3><span class="counts">${headParts.join(" · ")}</span>`;
       block.appendChild(head);
 
       const table = document.createElement("table");
       const tbody = document.createElement("tbody");
-      table.innerHTML = `<thead><tr><th>V-ID</th><th>Status</th><th>Detail</th></tr></thead>`;
-      dev.rows.forEach(r => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td class="vid">${r.vid}</td>
-          <td class="status ${r.match ? "na" : "open"}">${r.match ? "Not a Finding" : "Open"}</td>
-          <td class="detail">${escapeHtml(r.detail)}</td>
-        `;
-        tbody.appendChild(tr);
-      });
+      table.innerHTML = `<thead><tr><th>V-ID (click to expand)</th><th>Status</th><th>Confidence</th><th>Detail</th></tr></thead>`;
       table.appendChild(tbody);
+      dev.rows.forEach(r => {
+        const s = STATUS_LABELS[r.status] || { cls: "manual", label: r.status };
+        const conf = r.confidence || "-";
+        const statusHtml = `<td class="status ${s.cls}">${s.label}</td>`;
+        const confHtml = `<td class="confidence ${conf}">${conf === "-" ? "-" : conf}</td>`;
+        const detailHtml = `<td class="detail">${escapeHtml(r.detail)}</td>`;
+        addExpandableRow(tbody, r.vid, statusHtml + confHtml + detailHtml, r, 4);
+      });
       block.appendChild(table);
+
+      const withEvidence = dev.manualEvidence.filter(m => m.lines.length > 0);
+      const withoutEvidence = dev.manualEvidence.filter(m => m.lines.length === 0);
+      if (withEvidence.length > 0) {
+        const sub = document.createElement("div");
+        sub.className = "subhead";
+        sub.textContent = `Not automated — possible matching config lines (informational only) (${withEvidence.length} of ${dev.manualEvidence.length} rules have matching lines)`;
+        block.appendChild(sub);
+
+        const mTable = document.createElement("table");
+        const mBody = document.createElement("tbody");
+        mTable.innerHTML = `<thead><tr><th>V-ID (click to expand)</th><th>Rule</th><th>Possible matching config lines (informational)</th></tr></thead>`;
+        mTable.appendChild(mBody);
+        withEvidence.forEach(m => {
+          const lines = m.lines.map(l => `<div>${escapeHtml(l)}</div>`).join("");
+          const titleLabel = m.title + (m.disabledByToggle ? " (check disabled)" : "");
+          const titleHtml = `<td class="detail">${escapeHtml(titleLabel)}</td>`;
+          const evidenceHtml = `<td class="evidence">${lines}</td>`;
+          addExpandableRow(mBody, m.vid, titleHtml + evidenceHtml, m);
+        });
+        block.appendChild(mTable);
+      }
+
+      if (withoutEvidence.length > 0) {
+        const details = document.createElement("details");
+        details.style.marginTop = "0.5rem";
+        details.style.fontSize = "0.8rem";
+        details.style.color = "var(--dim)";
+        const summary = document.createElement("summary");
+        summary.style.cursor = "pointer";
+        summary.textContent = `Not automated — no matching configuration evidence found (${withoutEvidence.length})`;
+        details.appendChild(summary);
+        const list = document.createElement("ul");
+        list.style.margin = "0.5rem 0 0";
+        list.style.paddingLeft = "1.2rem";
+        withoutEvidence.forEach(m => {
+          const li = document.createElement("li");
+          li.textContent = `${m.vid} — ${m.title}${m.disabledByToggle ? " (check disabled)" : ""}`;
+          list.appendChild(li);
+        });
+        details.appendChild(list);
+        block.appendChild(details);
+      }
+
       container.appendChild(block);
     });
   }
