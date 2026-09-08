@@ -493,13 +493,15 @@
   // to the same generic manual-evidence bucket as the fully-manual rules,
   // instead of being auto-adjudicated by its RULE_CHECKS entry.
   // -------------------------------------------------------------------
-  // Rules removed from this list over time (000010, 000490, 000720, 001200,
-  // 001210) had their underlying blind spot fixed directly in RULE_CHECKS
-  // instead - e.g. real line-block parsing, or falling back to "manual"
-  // instead of a false "Open" when the config is genuinely ambiguous. Only
-  // rules with a REMAINING structural limitation that can't be resolved by
-  // adjudication logic alone (it's a parsing/verification ceiling, not a
-  // logic bug) stay in this opt-in list.
+  // Rules removed from this list over time (000010, 000490) had their
+  // underlying blind spot fixed directly in RULE_CHECKS instead - e.g.
+  // real line-block parsing, or falling back to "manual" instead of a
+  // false "Open" when the config is genuinely ambiguous. 000720/001200/
+  // 001210 are (back) in this list because each has a piece whose
+  // enabled/disabled DEFAULT state can't be proven from a static config
+  // file - only from live device state ('show ip http server status',
+  // 'show ip ssh') - so absence of an explicit command defers to manual
+  // review there rather than being auto-failed or auto-passed.
   const RISKY_RULES = [
     {
       id: "CISC-ND-000620",
@@ -507,9 +509,24 @@
       blurb: "This rule's own check text uses Type 5 (MD5) as its example, so the checker does not fail on Type 5 - that's intentional, not a gap. Enabling this just means you additionally want the hash type (5 vs 8/9) surfaced as informational evidence rather than left for manual review; it doesn't change what counts as compliant."
     },
     {
+      id: "CISC-ND-000720",
+      label: "Session Timeout (line exec-timeout + HTTP)",
+      blurb: "Line con/vty exec-timeout is checked deterministically, but the HTTP/HTTPS 'ip http timeout-policy' half of this rule can only be evaluated when the config explicitly enables OR explicitly fully disables ('no ip http server' AND 'no ip http secure-server') management HTTP/HTTPS - if neither is explicit, whether the requirement even applies can't be proven from a static file, so that piece defers to manual review."
+    },
+    {
       id: "CISC-ND-001030",
       label: "NTP Redundancy",
       blurb: "Parses vrf-scoped, IPv6, and keyed 'ntp server' lines, but still can't verify the servers are reachable, correctly routed, or that an address isn't simply invalid/typo'd - that requires live device state this tool doesn't have."
+    },
+    {
+      id: "CISC-ND-001200",
+      label: "SSH MAC Algorithms",
+      blurb: "Both the 'ip ssh version 2' precondition and the MAC-algorithm restriction only ever auto-fail on an explicit weak setting - their absence defers to manual review instead, since modern IOS-XE defaults to SSHv2 with a secure MAC set whether or not either command appears in the file, and confirming that really requires 'show ip ssh' on the live device."
+    },
+    {
+      id: "CISC-ND-001210",
+      label: "SSH Encryption Algorithms",
+      blurb: "Same reasoning as the MAC check above - absence of an explicit 'ip ssh version 2' or 'ip ssh server algorithm encryption' line defers to manual review rather than an automatic Open, since secure defaults on modern IOS-XE can't be confirmed from a static config file."
     },
     {
       id: "CISC-ND-001450",
@@ -655,16 +672,20 @@
   }
 
   // -------------------------------------------------------------------
-  // TACACS+/RADIUS server parser - Cisco IOS/IOS-XE supports two
-  // unrelated syntaxes for the same thing, and a device can use either
-  // (or, in practice, one or the other consistently):
-  //   Legacy:  "tacacs-server host 10.1.1.1" / "radius-server host 10.1.1.1"
-  //   Modern:  "tacacs server NAME" / "radius server NAME" block containing
-  //            an indented "address ipv4 10.1.1.1" (or ipv6) line.
+  // TACACS+/RADIUS server parser - Cisco IOS/IOS-XE supports THREE
+  // unrelated syntaxes for defining the same thing, and a device can use
+  // any one of them (or a mix):
+  //   Legacy:   "tacacs-server host 10.1.1.1" / "radius-server host 10.1.1.1"
+  //   Modern:   "tacacs server NAME" / "radius server NAME" block containing
+  //             an indented "address ipv4 10.1.1.1" (or ipv6) line.
+  //   Grouped:  "aaa group server tacacs+ NAME" / "aaa group server radius
+  //             NAME" block containing one or more indented
+  //             "server-private 10.1.1.1 ..." lines - each is its own
+  //             server entry, and a single group commonly lists several.
   // Recognizing only the legacy form (as an earlier version of this tool
-  // did) meant a device using only the modern block syntax - which is the
-  // current Cisco-recommended form - was counted as having ZERO servers.
-  // Both forms are normalized into the same {address, raw} shape and
+  // did) meant a device using the modern block syntax - or this grouped
+  // "server-private" form - was counted as having ZERO servers of that
+  // type. All three are normalized into the same {address, raw} shape and
   // de-duplicated by address so counting redundancy is syntax-agnostic.
   // -------------------------------------------------------------------
   function parseAaaServers(cfg, kind) {
@@ -686,7 +707,40 @@
         raw: am ? `${b.header} (address ${am[1]})` : `${b.header} (no address line found)`
       });
     });
+
+    const groupHeaderRe = kind === "tacacs"
+      ? /^aaa group server tacacs\+?\s+\S+/i
+      : /^aaa group server radius\s+\S+/i;
+    parseConfigBlocks(cfg, groupHeaderRe).forEach(b => {
+      const body = b.lines.join("\n");
+      allMatches(body, /^\s*server-private\s+(\S+)/im).forEach(m => {
+        results.push({ address: m[1], raw: `${b.header}: server-private ${m[1]}` });
+      });
+    });
+
     return results;
+  }
+
+  // -------------------------------------------------------------------
+  // Custom-named AAA server-group resolver. "aaa authentication login ...
+  // group CorpAAA" can reference a group whose NAME has nothing to do with
+  // "tacacs"/"radius" - its actual server type is only declared on its own
+  // "aaa group server tacacs+|radius CorpAAA" header line. Without this,
+  // a login line referencing a custom-named group wouldn't be recognized
+  // as using TACACS+/RADIUS at all, even though it demonstrably is.
+  // -------------------------------------------------------------------
+  function parseAaaGroups(cfg) {
+    const map = new Map(); // lowercased group name -> { type, servers: [{address, raw}] }
+    parseConfigBlocks(cfg, /^aaa group server (tacacs\+?|radius)\s+\S+/i).forEach(b => {
+      const hm = b.header.match(/^aaa group server (tacacs\+?|radius)\s+(\S+)/i);
+      if (!hm) return;
+      const type = hm[1].toLowerCase().replace("+", "");
+      const name = hm[2];
+      const body = b.lines.join("\n");
+      const servers = allMatches(body, /^\s*server-private\s+(\S+)/im).map(m => ({ address: m[1], raw: `${b.header}: server-private ${m[1]}` }));
+      map.set(name.toLowerCase(), { type, servers });
+    });
+    return map;
   }
 
   // -------------------------------------------------------------------
@@ -1044,6 +1098,16 @@
     },
 
     "CISC-ND-000720": (cfg) => {
+      // This rule's own check text (V-220544) requires BOTH pieces to
+      // terminate idle management connections after 5 minutes:
+      //   1. exec-timeout <= 5 min on every "line con"/"line vty" block
+      //   2. "ip http timeout-policy idle <=300 ..." whenever the HTTP or
+      //      HTTPS management server is actually enabled.
+      // An earlier version of this check only verified piece 1 - a config
+      // with a perfectly fine exec-timeout but no http timeout-policy (or
+      // one exceeding 300 seconds) while HTTP/HTTPS management was active
+      // would have incorrectly passed.
+      //
       // Evaluate exec-timeout per line con/vty BLOCK using the shared IOS
       // hierarchy parser, not a single regex's lookahead guessing where a
       // block ends - handles split vty ranges (0 4 / 5 15) and other
@@ -1069,13 +1133,60 @@
           evidence.push(`${b.header}: no exec-timeout set`);
         }
       });
-      if (tooLong.length === 0 && missing === 0) {
-        return { match: true, confidence: "high", detail: `All ${blocks.length} line con/vty block(s) have exec-timeout configured <= 5 minutes.`, evidence };
+      const lineOk = tooLong.length === 0 && missing === 0;
+
+      // HTTP/HTTPS timeout-policy piece. If the management server is
+      // explicitly disabled ("no ip http server" AND "no ip http
+      // secure-server"), the requirement doesn't apply at all. If it's
+      // explicitly enabled, "ip http timeout-policy idle <=300 ..." is
+      // required. If neither an explicit enable NOR a full explicit
+      // disable is present, the platform's default state can't be proven
+      // from a static config file (this varies by platform/release), so
+      // that piece is deferred to manual review instead of assumed either
+      // way - hence this check is opt-in via the "Uncertain checks" panel.
+      const httpEnabled = /^ip http server\b/im.test(cfg) || /^ip http secure-server\b/im.test(cfg);
+      const httpExplicitlyDisabled = /^no ip http server\b/im.test(cfg) && /^no ip http secure-server\b/im.test(cfg);
+      const httpTimeoutMatch = cfg.match(/^ip http timeout-policy\s+idle\s+(\d+)/im);
+
+      let httpState, httpDetail;
+      if (httpExplicitlyDisabled) {
+        httpState = "na";
+        httpDetail = "HTTP/HTTPS management is explicitly disabled ('no ip http server' and 'no ip http secure-server') - the timeout-policy requirement doesn't apply.";
+        evidence.push("no ip http server", "no ip http secure-server");
+      } else if (httpEnabled) {
+        if (httpTimeoutMatch) {
+          const idleSec = parseInt(httpTimeoutMatch[1], 10);
+          evidence.push(`ip http timeout-policy idle ${idleSec} ...`);
+          if (idleSec <= 300) {
+            httpState = "ok";
+            httpDetail = `HTTP/HTTPS management is enabled with 'ip http timeout-policy idle ${idleSec}' (<= 300 seconds / 5 minutes).`;
+          } else {
+            httpState = "bad";
+            httpDetail = `HTTP/HTTPS management is enabled, but 'ip http timeout-policy idle ${idleSec}' exceeds the 300-second (5-minute) limit.`;
+          }
+        } else {
+          httpState = "bad";
+          httpDetail = "HTTP/HTTPS management is enabled, but no 'ip http timeout-policy idle ...' was found.";
+        }
+      } else {
+        httpState = "ambiguous";
+        httpDetail = "Couldn't confirm whether HTTP/HTTPS management is enabled or disabled from this config alone (no explicit 'ip http server'/'ip http secure-server', and no explicit 'no ip http server'/'no ip http secure-server' for both) - the platform's default state can't be proven from a static file. If HTTP/HTTPS management IS enabled on the live device, 'ip http timeout-policy idle <= 300 ...' would also be required.";
       }
-      const parts = [];
-      if (missing > 0) parts.push(`${missing} block(s) with no exec-timeout at all`);
-      if (tooLong.length > 0) parts.push(`exceeding 5 min or disabled: ${tooLong.join(", ")}`);
-      return { match: false, confidence: "high", detail: "Issue(s): " + parts.join("; ") + ".", evidence };
+
+      if (!lineOk) {
+        const parts = [];
+        if (missing > 0) parts.push(`${missing} block(s) with no exec-timeout at all`);
+        if (tooLong.length > 0) parts.push(`exceeding 5 min or disabled: ${tooLong.join(", ")}`);
+        if (httpState === "bad") parts.push(httpDetail);
+        return { match: false, confidence: "high", detail: "Issue(s): " + parts.join("; ") + ".", evidence };
+      }
+      if (httpState === "bad") {
+        return { match: false, confidence: "high", detail: `All ${blocks.length} line con/vty block(s) have exec-timeout configured <= 5 minutes, but ${httpDetail}`, evidence };
+      }
+      if (httpState === "ambiguous") {
+        return { status: "manual", confidence: "medium", detail: `All ${blocks.length} line con/vty block(s) have exec-timeout configured <= 5 minutes. ${httpDetail}`, evidence };
+      }
+      return { match: true, confidence: "high", detail: `All ${blocks.length} line con/vty block(s) have exec-timeout configured <= 5 minutes. ${httpDetail}`, evidence };
     },
 
     "CISC-ND-001030": (cfg) => {
@@ -1225,27 +1336,52 @@
       // "aaa authentication login default local" plus two radius/tacacs-
       // server lines would previously pass, even though "local" alone means
       // the servers aren't actually being used as the auth method. Require
-      // at least one aaa authentication login line to actually invoke
-      // "group radius" or "group tacacs+", not just exist in any form.
+      // at least one aaa authentication login line to actually invoke a
+      // server group, not just exist in any form.
       //
       // Strengthened further: 1 TACACS+ server + 1 RADIUS server used to
       // satisfy a ">= 2 servers" threshold even though that isn't redundant
-      // for EITHER method individually. Identify which method(s) the login
-      // line(s) actually invoke and require >= 2 servers of THAT type. The
-      // full method-list line is preserved verbatim as evidence so the
+      // for EITHER method individually. Every "group <token>" referenced in
+      // the method list is resolved to an actual server pool and requires
+      // >= 2 servers of THAT pool specifically:
+      //   - "group tacacs+"/"group radius" (the built-in keyword) resolves
+      //     to the GLOBAL pool for that type - every "tacacs-server host",
+      //     "tacacs server NAME"/address, and "aaa group server tacacs+
+      //     NAME"/server-private entry in the config (same for radius).
+      //   - "group <custom-name>" (e.g. "group CorpAAA") resolves to
+      //     exactly the servers declared inside that group's OWN
+      //     "aaa group server tacacs+|radius <custom-name>" block - a
+      //     custom group name has nothing to do with "tacacs"/"radius" as
+      //     text, so it can't be recognized by string-matching the token;
+      //     it has to be looked up against groups actually defined in the
+      //     config (parseAaaGroups).
+      //   - a token that resolves to neither is left for manual review
+      //     rather than assumed to be Open or Pass.
+      // The full method-list line is preserved verbatim as evidence so the
       // configured authentication ORDER (e.g. "group tacacs+ local" vs
       // "local group tacacs+") is visible to a reviewer, not just presence.
-      //
-      // Server counting uses parseAaaServers(), which recognizes BOTH the
-      // legacy "tacacs-server host <ip>" line syntax AND the modern
-      // "tacacs server NAME" / "address ipv4 <ip>" block syntax (same for
-      // radius) - a device using only the modern block form used to be
-      // counted as having zero servers of that type.
-      const radiusServers = parseAaaServers(cfg, "radius");
-      const tacacsServers = parseAaaServers(cfg, "tacacs");
+      const aaaModel = /^aaa new-model/im.test(cfg);
+      const aaaLoginLines = allMatches(cfg, /^aaa authentication login\s+.*$/im).map(m => m[0].trim());
+      const groupLines = aaaLoginLines.filter(l => /\bgroup\s+\S+/i.test(l));
+
+      if (!aaaModel) {
+        return { match: false, confidence: "high", detail: "'aaa new-model' is not configured.", evidence: aaaLoginLines };
+      }
+      if (groupLines.length === 0) {
+        return {
+          match: false, confidence: "high",
+          detail: "No 'aaa authentication login' line references any server group - servers may be configured but unused (e.g. login method is 'local' only).",
+          evidence: aaaLoginLines
+        };
+      }
+
+      const aaaGroups = parseAaaGroups(cfg);
+      const globalTacacs = parseAaaServers(cfg, "tacacs");
+      const globalRadius = parseAaaServers(cfg, "radius");
+
       // De-dupe by address when one is known; entries with no discoverable
-      // address (a block with no "address ipv4/ipv6" line) each still count
-      // individually, since they can't be proven to be duplicates of anything.
+      // address each still count individually, since they can't be proven
+      // to be duplicates of anything.
       function uniqueCount(servers) {
         const seenAddrs = new Set();
         let count = 0;
@@ -1258,47 +1394,45 @@
         });
         return count;
       }
-      const radiusCount = uniqueCount(radiusServers);
-      const tacacsCount = uniqueCount(tacacsServers);
-      const aaaModel = /^aaa new-model/im.test(cfg);
-      const aaaLoginLines = allMatches(cfg, /^aaa authentication login\s+.*$/im).map(m => m[0].trim());
-      const groupLines = aaaLoginLines.filter(l => /group\s+(radius|tacacs\+?)/i.test(l));
-
-      if (!aaaModel) {
-        return { match: false, confidence: "high", detail: "'aaa new-model' is not configured.", evidence: aaaLoginLines };
-      }
-      if (groupLines.length === 0) {
-        return {
-          match: false, confidence: "high",
-          detail: "No 'aaa authentication login' line references a radius/tacacs server group - servers may be configured but unused (e.g. login method is 'local' only).",
-          evidence: aaaLoginLines
-        };
-      }
-
-      const typesUsed = new Set();
-      groupLines.forEach(l => {
-        const gm = l.match(/group\s+(radius|tacacs\+?)/i);
-        if (gm) typesUsed.add(gm[1].toLowerCase().replace("+", ""));
-      });
 
       const evidence = [...groupLines];
       const problems = [];
+      const unresolvedTokens = new Set();
       let anyTypeSatisfied = false;
-      if (typesUsed.has("radius")) {
-        evidence.push(...radiusServers.map(s => s.raw));
-        if (radiusCount >= 2) anyTypeSatisfied = true;
-        else problems.push(`RADIUS is used for login but only ${radiusCount} unique radius server(s) found (need >= 2 of the SAME type for redundancy)`);
-      }
-      if (typesUsed.has("tacacs")) {
-        evidence.push(...tacacsServers.map(s => s.raw));
-        if (tacacsCount >= 2) anyTypeSatisfied = true;
-        else problems.push(`TACACS+ is used for login but only ${tacacsCount} unique tacacs server(s) found (need >= 2 of the SAME type for redundancy)`);
-      }
 
+      groupLines.forEach(l => {
+        allMatches(l, /\bgroup\s+(\S+)/gi).forEach(gm => {
+          const token = gm[1].replace(/[,;]+$/, "");
+          const lower = token.toLowerCase();
+          let type = null, pool = null;
+          if (lower === "tacacs+" || lower === "tacacs") { type = "TACACS+"; pool = globalTacacs; }
+          else if (lower === "radius") { type = "RADIUS"; pool = globalRadius; }
+          else if (aaaGroups.has(lower)) {
+            const g = aaaGroups.get(lower);
+            type = `${g.type === "tacacs" ? "TACACS+" : "RADIUS"} group "${token}"`;
+            pool = g.servers;
+          } else {
+            unresolvedTokens.add(token);
+            return;
+          }
+          const count = uniqueCount(pool);
+          evidence.push(...pool.map(s => s.raw));
+          if (count >= 2) anyTypeSatisfied = true;
+          else problems.push(`${type} is used for login but only ${count} unique server(s) were found for it (need >= 2 of the SAME group for redundancy)`);
+        });
+      });
+
+      if (unresolvedTokens.size > 0) {
+        return {
+          status: "manual", confidence: "medium",
+          detail: `The login method list references group(s) that don't match "tacacs+"/"radius" and don't match any "aaa group server ..." block found in this config: ${[...unresolvedTokens].join(", ")}. Verify manually whether that group has >= 2 redundant servers (it may be defined in a separate config fragment not included here).`,
+          evidence
+        };
+      }
       if (anyTypeSatisfied && problems.length === 0) {
         return {
           match: true, confidence: "high",
-          detail: `aaa new-model is present and the login method list invokes ${[...typesUsed].join(" and ")}, backed by >= 2 server(s) of that type. Configured authentication order: ${groupLines.join(" | ")}.`,
+          detail: `aaa new-model is present and the login method list resolves to at least one server group backed by >= 2 servers. Configured authentication order: ${groupLines.join(" | ")}.`,
           evidence
         };
       }
@@ -1321,41 +1455,65 @@
     "CISC-ND-001200": (cfg) => {
       // Three states instead of two: an explicit secure restriction passes,
       // an explicit weak algorithm fails, but the ABSENCE of any explicit
-      // restriction is neither - modern IOS-XE secure defaults may already
-      // exclude weak MACs, and that can't be confirmed from a running-config
-      // alone, so it goes to manual review instead of an automatic "Open".
+      // restriction is neither.
+      //
+      // Same reasoning now applies to "ip ssh version 2" itself: modern
+      // IOS-XE ships with SSHv1 unsupported and defaults to v2, so a
+      // config file that never explicitly sets "ip ssh version 2" is NOT
+      // proof the device is running v1 or something non-compliant - it's
+      // just unconfirmable from static text. Confirming the live version
+      // actually requires running "show ip ssh" on the device, which is
+      // outside what this tool can see. So: explicit "ip ssh version 2"
+      // present is confidently Not a Finding for this piece; absent goes
+      // to Manual Review rather than an automatic Open. This check is
+      // opt-in via the "Uncertain checks" panel because of that residual
+      // ambiguity.
       const verOk = /^ip ssh version 2/im.test(cfg);
-      if (!verOk) return { match: false, confidence: "high", detail: "SSH is not explicitly set to version 2." };
+      if (!verOk) {
+        return {
+          status: "manual", confidence: "low",
+          detail: "No explicit 'ip ssh version 2' line found. Modern IOS-XE defaults to SSHv2 (v1 isn't even supported), so this alone doesn't mean the device is noncompliant - but confirming the live version requires running 'show ip ssh' on the device, which a static config file can't prove either way.",
+          evidence: []
+        };
+      }
       const m = cfg.match(/^ip ssh server algorithm mac\s+(.+)$/im);
       if (!m) {
         return {
           status: "manual", confidence: "medium",
-          detail: "SSH version 2 is set, but no explicit 'ip ssh server algorithm mac' restriction was found. Modern IOS-XE secure defaults may already exclude weak MACs, but that can't be confirmed from the running-config alone - verify the platform's default MAC set or an active session's negotiated algorithm.",
-          evidence: []
+          detail: "SSH version 2 is explicitly set, but no explicit 'ip ssh server algorithm mac' restriction was found. Modern IOS-XE secure defaults may already exclude weak MACs, but that can't be confirmed from the running-config alone - verify the platform's default MAC set or an active session's negotiated algorithm.",
+          evidence: [`ip ssh version 2`]
         };
       }
       const algos = m[1].trim().split(/\s+/);
       const weak = algos.filter(a => /md5|hmac-sha1(?!-2)|^sha1$/i.test(a));
       if (weak.length > 0) return { match: false, confidence: "high", detail: `Weak MAC algorithm(s) allowed: ${weak.join(", ")}.`, evidence: [`ip ssh server algorithm mac ${algos.join(" ")}`] };
-      return { match: true, confidence: "high", detail: `SSH MAC restricted to: ${algos.join(", ")}.`, evidence: [`ip ssh server algorithm mac ${algos.join(" ")}`] };
+      return { match: true, confidence: "high", detail: `SSH version 2 is explicit and MAC is restricted to: ${algos.join(", ")}.`, evidence: [`ip ssh version 2`, `ip ssh server algorithm mac ${algos.join(" ")}`] };
     },
 
     "CISC-ND-001210": (cfg) => {
-      // Same three-state logic as the MAC check above.
+      // Same three-state logic (including the SSH-version precondition) as
+      // the MAC check above - see CISC-ND-001200 for the full rationale.
+      // Also opt-in via the "Uncertain checks" panel for the same reason.
       const verOk = /^ip ssh version 2/im.test(cfg);
-      if (!verOk) return { match: false, confidence: "high", detail: "SSH is not explicitly set to version 2." };
+      if (!verOk) {
+        return {
+          status: "manual", confidence: "low",
+          detail: "No explicit 'ip ssh version 2' line found. Modern IOS-XE defaults to SSHv2 (v1 isn't even supported), so this alone doesn't mean the device is noncompliant - but confirming the live version requires running 'show ip ssh' on the device, which a static config file can't prove either way.",
+          evidence: []
+        };
+      }
       const m = cfg.match(/^ip ssh server algorithm encryption\s+(.+)$/im);
       if (!m) {
         return {
           status: "manual", confidence: "medium",
-          detail: "SSH version 2 is set, but no explicit 'ip ssh server algorithm encryption' restriction was found. Modern IOS-XE secure defaults may already exclude weak ciphers, but that can't be confirmed from the running-config alone - verify the platform's default cipher set or an active session's negotiated algorithm.",
-          evidence: []
+          detail: "SSH version 2 is explicitly set, but no explicit 'ip ssh server algorithm encryption' restriction was found. Modern IOS-XE secure defaults may already exclude weak ciphers, but that can't be confirmed from the running-config alone - verify the platform's default cipher set or an active session's negotiated algorithm.",
+          evidence: [`ip ssh version 2`]
         };
       }
       const algos = m[1].trim().split(/\s+/);
       const weak = algos.filter(a => /(^|-)(3des|des)(-|$)|cbc/i.test(a));
       if (weak.length > 0) return { match: false, confidence: "high", detail: `Weak/disallowed cipher(s) allowed: ${weak.join(", ")}.`, evidence: [`ip ssh server algorithm encryption ${algos.join(" ")}`] };
-      return { match: true, confidence: "high", detail: `SSH encryption restricted to: ${algos.join(", ")}.`, evidence: [`ip ssh server algorithm encryption ${algos.join(" ")}`] };
+      return { match: true, confidence: "high", detail: `SSH version 2 is explicit and encryption is restricted to: ${algos.join(", ")}.`, evidence: [`ip ssh version 2`, `ip ssh server algorithm encryption ${algos.join(" ")}`] };
     },
 
     // CISC-ND-000380/000390/000460 all share the identical technical check
