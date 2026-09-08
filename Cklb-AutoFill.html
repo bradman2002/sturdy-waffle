@@ -178,7 +178,15 @@
     cursor: pointer;
     background: rgba(255,255,255,0.02);
   }
-  .risky-header .chevron { display: inline-block; margin-top: 0.1rem; font-size: 0.7em; transition: transform 0.12s; flex-shrink: 0; }
+  .chevron {
+    display: inline-block;
+    width: 0.6em;
+    height: 0.6em;
+    flex-shrink: 0;
+    transition: transform 0.12s;
+    vertical-align: -0.05em;
+  }
+  .risky-header .chevron { margin-top: 0.15rem; }
   .risky-header.expanded .chevron { transform: rotate(90deg); }
   .risky-header strong { color: var(--text); }
   .risky-list { padding: 0.25rem 0.9rem 0.75rem; border-top: 1px solid var(--border); }
@@ -208,8 +216,80 @@
   .risky-item .rule-blurb { color: var(--dim); margin-top: 0.15rem; }
   .vid-toggle { cursor: pointer; user-select: none; }
   .vid-toggle:hover { text-decoration: underline; }
-  .vid-toggle .chevron { display: inline-block; margin-right: 0.25rem; font-size: 0.7em; transition: transform 0.12s; }
+  .vid-toggle .chevron { margin-right: 0.35rem; }
   .vid-toggle.expanded .chevron { transform: rotate(90deg); }
+  .device-head { cursor: pointer; user-select: none; }
+  .subhead.section-toggle { cursor: pointer; user-select: none; }
+  .section-toggle .chevron, .device-head .chevron { margin-right: 0.4rem; }
+  .section-toggle.expanded .chevron, .device-head.expanded .chevron { transform: rotate(90deg); }
+  .section-note { font-size: 0.75rem; color: var(--dim); font-style: italic; margin: 0.4rem 0; }
+  .results-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.6rem 0.9rem;
+    margin: 0.75rem 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.78rem;
+    color: var(--dim);
+  }
+  .results-toolbar label { display: flex; align-items: center; gap: 0.4rem; }
+  .results-toolbar select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.78rem;
+    font-family: inherit;
+  }
+  .results-toolbar select:hover { border-color: var(--accent); }
+  .toolbar-note { color: var(--dim); font-style: italic; }
+  .device-block.filtered-empty { display: none; }
+  .paste-toggle {
+    display: flex; align-items: center;
+    font-size: 0.82rem; color: var(--dim);
+    margin-top: 0.75rem;
+  }
+  .paste-toggle:hover { color: var(--accent); }
+  .paste-panel { margin-top: 0.6rem; }
+  .paste-panel input[type="text"], .paste-panel textarea {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.82rem;
+    font-family: var(--mono);
+    margin-bottom: 0.5rem;
+  }
+  .paste-panel textarea { resize: vertical; min-height: 120px; }
+  .paste-panel input[type="text"]:focus, .paste-panel textarea:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .paste-controls { display: flex; gap: 0.5rem; }
+  .paste-controls button {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .paste-controls button:hover { border-color: var(--accent); color: var(--accent); }
+  #addPastedConfigBtn { border-color: var(--accent); color: var(--accent); }
+  .possible-matches-toggle {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-size: 0.78rem; color: var(--dim);
+    margin: 0.5rem 0 0.75rem;
+    cursor: pointer; user-select: none;
+  }
+  .possible-matches-toggle input { flex-shrink: 0; }
   .status.manual-off { color: var(--dim); }
   .detail-row td {
     background: rgba(255,255,255,0.02);
@@ -257,11 +337,23 @@
       <input type="file" id="fileCfg" accept=".txt,.cfg,.log,text/plain" multiple>
     </div>
     <div class="rules-banner hidden" id="cfgWarning" style="margin-top:0.75rem;"></div>
+
+    <div class="section-toggle paste-toggle" id="pasteToggle">
+      <svg class="chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 2l7 6-7 6V2z"/></svg><span>Or paste config text instead</span>
+    </div>
+    <div class="paste-panel hidden" id="pastePanel">
+      <input type="text" id="pasteConfigName" placeholder="Optional label (e.g. SW01.cfg) - a name is generated if left blank">
+      <textarea id="pasteConfigText" rows="8" placeholder="Paste the device running-config here..."></textarea>
+      <div class="paste-controls">
+        <button type="button" id="addPastedConfigBtn">Add pasted config</button>
+        <button type="button" id="clearConfigsBtn">Clear all loaded configs</button>
+      </div>
+    </div>
   </div>
 
   <div class="risky-panel">
     <div class="risky-header" id="riskyHeader">
-      <span class="chevron">&#9656;</span>
+      <svg class="chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 2l7 6-7 6V2z"/></svg>
       <span><strong>Uncertain checks</strong> — <span id="riskyCountText">8 checks</span> have known blind spots (shown below). <strong>All off by default</strong> - each one falls back to manual review with evidence shown unless you explicitly enable it, having judged the trade-off acceptable for your environment.</span>
     </div>
     <div class="risky-list hidden" id="riskyList">
@@ -274,6 +366,11 @@
   </div>
 
   <button class="run" id="runBtn" disabled>Run checks</button>
+
+  <label class="possible-matches-toggle" for="possibleMatchesToggle">
+    <input type="checkbox" id="possibleMatchesToggle" checked>
+    Search not-automated rules for possible matching config lines (shown as informational context, never as a finding)
+  </label>
 
   <div id="results" class="hidden">
     <div class="card">
@@ -289,6 +386,28 @@
       </div>
       <div class="rules-banner hidden" id="errorBanner" style="border-color: var(--open); color: var(--open); font-weight: 700;"></div>
       <div class="rules-banner" id="rulesBanner"></div>
+      <div class="results-toolbar hidden" id="resultsToolbar">
+        <label>Show:
+          <select id="statusFilter">
+            <option value="all">All statuses</option>
+            <option value="open">Open only</option>
+            <option value="manual">Manual review only</option>
+            <option value="not_a_finding">Not a finding only</option>
+            <option value="not_applicable">Not applicable only</option>
+            <option value="error">Automation errors only</option>
+          </select>
+        </label>
+        <label>Sort devices by:
+          <select id="deviceSort">
+            <option value="name">Name (A–Z)</option>
+            <option value="open_desc">Most Open first</option>
+            <option value="manual_desc">Most Manual Review first</option>
+            <option value="notautomated_desc">Most Not Automated first</option>
+            <option value="errors_desc">Most Automation Errors first</option>
+          </select>
+        </label>
+        <span class="toolbar-note" id="filterNote"></span>
+      </div>
       <div id="deviceTables"></div>
       <a class="download hidden" id="downloadLink">Download filled .cklb files (.zip)</a>
     </div>
@@ -308,6 +427,13 @@
   let configFiles = []; // [{name, text}]
 
   const TOOL_VERSION = "2.0";
+
+  // Shared expand/collapse chevron icon, used everywhere a section or row
+  // can be toggled. An inline SVG rather than a Unicode glyph (e.g. ▸) -
+  // triangle glyphs render inconsistently (sometimes as a tiny dot) across
+  // fonts/OSes, especially at small sizes; an SVG path always renders the
+  // same everywhere.
+  const CHEVRON_SVG = '<svg class="chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 2l7 6-7 6V2z"/></svg>';
 
   // -------------------------------------------------------------------
   // Filename safety - never trust config-derived text (hostname) blindly
@@ -467,10 +593,17 @@
   });
 
   const cfgWarningEl = document.getElementById("cfgWarning");
+  const nameCfgEl = document.getElementById("nameCfg");
 
-  wireDropMulti("dropCfg", "fileCfg", "nameCfg", (files) => {
-    configFiles = files;
-    const suspicious = files.filter(f => !looksLikeCiscoConfig(f.text)).map(f => f.name);
+  // Shared by both the file-drop path and the paste-config path, so the
+  // warning banner, filename summary, and Run-button enablement always
+  // reflect the full, current configFiles list regardless of which input
+  // method added to it.
+  function refreshConfigFilesUI() {
+    nameCfgEl.textContent = configFiles.length === 0 ? ""
+      : configFiles.length === 1 ? configFiles[0].name
+      : `${configFiles.length} config(s) loaded`;
+    const suspicious = configFiles.filter(f => !looksLikeCiscoConfig(f.text)).map(f => f.name);
     if (cfgWarningEl) {
       if (suspicious.length > 0) {
         cfgWarningEl.classList.remove("hidden");
@@ -481,6 +614,50 @@
       }
     }
     checkReady();
+  }
+
+  wireDropMulti("dropCfg", "fileCfg", "nameCfg", (files) => {
+    // A new file selection REPLACES the set (matches how a native file
+    // input behaves - re-picking files doesn't add to the old picks).
+    // Pasted configs are additive instead; see addPastedConfigBtn below.
+    configFiles = files;
+    refreshConfigFilesUI();
+  });
+
+  // -------------------------------------------------------------------
+  // Paste-config alternative to file upload - useful for a quick one-off
+  // check without saving a file first. Additive: each "Add pasted config"
+  // click appends one more entry to configFiles alongside anything already
+  // loaded (via upload or a previous paste).
+  // -------------------------------------------------------------------
+  const pasteToggle = document.getElementById("pasteToggle");
+  const pastePanel = document.getElementById("pastePanel");
+  pasteToggle.addEventListener("click", () => {
+    pastePanel.classList.toggle("hidden");
+    pasteToggle.classList.toggle("expanded");
+  });
+
+  let pastedConfigCounter = 0;
+  document.getElementById("addPastedConfigBtn").addEventListener("click", () => {
+    const textEl = document.getElementById("pasteConfigText");
+    const nameEl = document.getElementById("pasteConfigName");
+    const text = textEl.value;
+    if (!text.trim()) {
+      alert("Paste some config text first.");
+      return;
+    }
+    pastedConfigCounter++;
+    const name = nameEl.value.trim() || `pasted-config-${pastedConfigCounter}.cfg`;
+    configFiles = [...configFiles, { name, text }];
+    refreshConfigFilesUI();
+    textEl.value = "";
+    nameEl.value = "";
+  });
+
+  document.getElementById("clearConfigsBtn").addEventListener("click", () => {
+    configFiles = [];
+    document.getElementById("fileCfg").value = "";
+    refreshConfigFilesUI();
   });
 
   function checkReady() {
@@ -1583,6 +1760,7 @@
     let grandManualVerdict = 0, grandNotAutomated = 0;
     const disabledRiskyKeys = getDisabledRiskyKeys();
     const runTimestamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+    const includePossibleMatches = document.getElementById("possibleMatchesToggle").checked;
 
     // Manual-review evidence anchors depend only on the template and which
     // risky checks are disabled this run, so build this list once and
@@ -1694,20 +1872,25 @@
         cklb.id = (crypto.randomUUID ? crypto.randomUUID() : fallbackUuid());
       }
 
-      // Persist evidence into finding_details for every manual-review rule
-      // (both the genuinely-manual ones and any disabled via the panel
-      // above) where something was actually found - so a reviewer opening
-      // this file later, without this tool open, still sees it. Status is
-      // deliberately left untouched (stays not_reviewed) - this is context,
-      // not an adjudication. Labeled explicitly as informational: an anchor
-      // match is a hint about where to look, not proof the requirement is met.
-      const manualEvidence = gatherEvidenceForDevice(manualRules, configLines, 6);
+      // Persist evidence into COMMENTS (not finding_details) for every
+      // not-automated rule where something was actually found - so a
+      // reviewer opening this file later, without this tool open, still
+      // sees it. finding_details is reserved for actual adjudications
+      // this tool made; a "possible match" is not one - it's an anchor
+      // hint about where to look, not proof the requirement is met, so it
+      // belongs in comments/context rather than looking like a finding.
+      // Status is deliberately left untouched (stays not_reviewed).
+      // Skipped entirely when the "possible matches" toggle is off, but
+      // manualRules.length (not manualEvidence.length) still drives the
+      // Not Automated count below, so that count stays accurate either way.
+      const manualEvidence = includePossibleMatches ? gatherEvidenceForDevice(manualRules, configLines, 6) : [];
       const evidenceByVid = new Map(manualEvidence.filter(m => m.lines.length > 0).map(m => [m.vid, m]));
       (cklb.stigs || []).forEach(stig => {
         (stig.rules || []).forEach(rule => {
           const ev = evidenceByVid.get(rule.group_id);
           if (!ev) return;
-          rule.finding_details = "POSSIBLE MATCHING CONFIGURATION LINES - INFORMATIONAL ONLY (not an adjudication - requires manual review): " + ev.lines.join(" | ");
+          const note = "POSSIBLE MATCHING CONFIGURATION LINES - INFORMATIONAL ONLY (not an adjudication - requires manual review): " + ev.lines.join(" | ");
+          rule.comments = rule.comments ? rule.comments + " | " + note : note;
         });
       });
 
@@ -1715,8 +1898,11 @@
       // it" (Manual Review) from "this rule never had an automated check
       // run against it at all this run" (Not Automated) - they mean very
       // different things to a reviewer scanning results across many devices.
+      // Uses manualRules.length rather than manualEvidence.length so this
+      // count stays correct even when possible-matches searching is
+      // toggled off (manualEvidence would otherwise be empty).
       const manualVerdictCount = rows.filter(r => r.status === "manual").length;
-      const notAutomatedCount = manualEvidence.length;
+      const notAutomatedCount = manualRules.length;
       const manualTotal = manualVerdictCount + errorCount + notAutomatedCount;
 
       grandFilled += filled;
@@ -1779,7 +1965,7 @@
     const id = "detail-" + (expandCounter++);
 
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="vid"><span class="vid-toggle"><span class="chevron">&#9656;</span>${escapeHtml(vidLabel)}</span></td>` + restCellsHtml;
+    tr.innerHTML = `<td class="vid"><span class="vid-toggle">${CHEVRON_SVG}${escapeHtml(vidLabel)}</span></td>` + restCellsHtml;
     tbody.appendChild(tr);
 
     const detailTr = document.createElement("tr");
@@ -1795,6 +1981,8 @@
       detailTr.classList.toggle("hidden");
       toggle.classList.toggle("expanded");
     });
+
+    return { tr, detailTr };
   }
 
   function renderResults(deviceResults, grandFilled, grandNA, grandOpen, grandErrors, grandManualVerdict, grandNotAutomated, ruleCounts) {
@@ -1850,15 +2038,28 @@
     deviceResults.forEach(dev => {
       const block = document.createElement("div");
       block.className = "device-block";
+      // Dataset used by the sort control below - read fresh from these
+      // rather than recomputing, so sorting never has to re-touch the
+      // underlying result data.
+      block.dataset.deviceName = dev.deviceName;
+      block.dataset.open = dev.open;
+      block.dataset.manual = dev.manualVerdictCount;
+      block.dataset.notAutomated = dev.notAutomatedCount;
+      block.dataset.errors = dev.errorCount;
 
+      // Main findings table is now collapsible - click the device header to
+      // show/hide it, same interaction pattern as the "Uncertain checks"
+      // panel above. Defaults to expanded so nothing changes for anyone
+      // who never touches the chevron.
       const head = document.createElement("div");
-      head.className = "device-head";
+      head.className = "device-head expanded";
       const headParts = [`${dev.na} not a finding`, `${dev.open} open`, `${dev.manualVerdictCount} manual review`, `${dev.notAutomatedCount} not automated`];
       if (dev.naOther) headParts.push(`${dev.naOther} not applicable`);
       if (dev.errorCount) headParts.push(`${dev.errorCount} automation error${dev.errorCount === 1 ? "" : "s"}`);
-      head.innerHTML = `<h3>${escapeHtml(dev.deviceName)}</h3><span class="counts">${headParts.join(" · ")}</span>`;
+      head.innerHTML = `<h3>${CHEVRON_SVG}${escapeHtml(dev.deviceName)}</h3><span class="counts">${headParts.join(" · ")}</span>`;
       block.appendChild(head);
 
+      const tableWrap = document.createElement("div");
       const table = document.createElement("table");
       const tbody = document.createElement("tbody");
       table.innerHTML = `<thead><tr><th>V-ID (click to expand)</th><th>Status</th><th>Confidence</th><th>Detail</th></tr></thead>`;
@@ -1869,18 +2070,36 @@
         const statusHtml = `<td class="status ${s.cls}">${s.label}</td>`;
         const confHtml = `<td class="confidence ${conf}">${conf === "-" ? "-" : conf}</td>`;
         const detailHtml = `<td class="detail">${escapeHtml(r.detail)}</td>`;
-        addExpandableRow(tbody, r.vid, statusHtml + confHtml + detailHtml, r, 4);
+        const { tr } = addExpandableRow(tbody, r.vid, statusHtml + confHtml + detailHtml, r, 4);
+        // Tagged for the status filter below - only main-findings rows have
+        // a real adjudication status, so only these are ever hidden by it.
+        tr.dataset.status = r.status;
       });
-      block.appendChild(table);
+      tableWrap.appendChild(table);
+      block.appendChild(tableWrap);
+      head.addEventListener("click", () => {
+        tableWrap.classList.toggle("hidden");
+        head.classList.toggle("expanded");
+      });
 
       const withEvidence = dev.manualEvidence.filter(m => m.lines.length > 0);
       const withoutEvidence = dev.manualEvidence.filter(m => m.lines.length === 0);
+      // gatherEvidenceForDevice always returns one entry per not-automated
+      // rule (with lines:[] when nothing matched), so the only way
+      // manualEvidence ends up empty while notAutomatedCount is nonzero is
+      // that the search was skipped entirely (toggle off) - no separate
+      // flag needs to be threaded through just to know that.
+      const possibleMatchesWereSearched = dev.manualEvidence.length > 0 || dev.notAutomatedCount === 0;
+
       if (withEvidence.length > 0) {
+        // Same collapsible pattern for the possible-matches section - click
+        // the subhead to show/hide its table.
         const sub = document.createElement("div");
-        sub.className = "subhead";
-        sub.textContent = `Not automated — possible matching config lines (informational only) (${withEvidence.length} of ${dev.manualEvidence.length} rules have matching lines)`;
+        sub.className = "subhead section-toggle expanded";
+        sub.innerHTML = `${CHEVRON_SVG}Not automated — possible matching config lines (informational only) (${withEvidence.length} of ${dev.manualEvidence.length} rules have matching lines)`;
         block.appendChild(sub);
 
+        const matchWrap = document.createElement("div");
         const mTable = document.createElement("table");
         const mBody = document.createElement("tbody");
         mTable.innerHTML = `<thead><tr><th>V-ID (click to expand)</th><th>Rule</th><th>Possible matching config lines (informational)</th></tr></thead>`;
@@ -1892,10 +2111,24 @@
           const evidenceHtml = `<td class="evidence">${lines}</td>`;
           addExpandableRow(mBody, m.vid, titleHtml + evidenceHtml, m);
         });
-        block.appendChild(mTable);
+        matchWrap.appendChild(mTable);
+        block.appendChild(matchWrap);
+        sub.addEventListener("click", () => {
+          matchWrap.classList.toggle("hidden");
+          sub.classList.toggle("expanded");
+        });
+      } else if (dev.notAutomatedCount > 0 && !possibleMatchesWereSearched) {
+        // The toggle above the Run button was off this run, so no config
+        // search happened at all for not-automated rules - make that
+        // explicit rather than leaving an unexplained gap where the
+        // possible-matches section would normally be.
+        const note = document.createElement("div");
+        note.className = "section-note";
+        note.textContent = `Possible-matches evidence search was off for this run (${dev.notAutomatedCount} not-automated rule(s) on this device weren't searched). Enable the toggle above "Run checks" and re-run to include it.`;
+        block.appendChild(note);
       }
 
-      if (withoutEvidence.length > 0) {
+      if (possibleMatchesWereSearched && withoutEvidence.length > 0) {
         const details = document.createElement("details");
         details.style.marginTop = "0.5rem";
         details.style.fontSize = "0.8rem";
@@ -1918,7 +2151,83 @@
 
       container.appendChild(block);
     });
+
+    document.getElementById("resultsToolbar").classList.remove("hidden");
+    applyResultsView();
   }
+
+  // -------------------------------------------------------------------
+  // Filter/sort is pure DOM manipulation over the already-rendered device
+  // blocks - no re-fetch or recompute needed, since every value it acts on
+  // (row status, per-device counts) was stamped onto the DOM as a dataset
+  // attribute at render time. Re-run on every control change, and once
+  // right after a fresh render so a filter/sort choice persists across runs.
+  // -------------------------------------------------------------------
+  function applyResultsView() {
+    const statusFilter = document.getElementById("statusFilter");
+    const deviceSort = document.getElementById("deviceSort");
+    const container = document.getElementById("deviceTables");
+    const note = document.getElementById("filterNote");
+    if (!statusFilter || !container) return;
+
+    const filterValue = statusFilter.value;
+    const blocks = Array.from(container.querySelectorAll(".device-block"));
+
+    let totalRows = 0, shownRows = 0;
+    blocks.forEach(block => {
+      const rows = block.querySelectorAll("table tbody tr[data-status]");
+      let shownInBlock = 0;
+      rows.forEach(tr => {
+        totalRows++;
+        const show = filterValue === "all" || tr.dataset.status === filterValue;
+        if (show) {
+          tr.classList.remove("hidden");
+          shownRows++;
+          shownInBlock++;
+        } else {
+          tr.classList.add("hidden");
+          // Force-collapse the detail row too, so a previously-expanded
+          // row doesn't leave an orphaned detail block visible under a
+          // hidden main row.
+          const detailTr = tr.nextElementSibling;
+          if (detailTr && detailTr.classList.contains("detail-row")) {
+            detailTr.classList.add("hidden");
+          }
+          const toggle = tr.querySelector(".vid-toggle");
+          if (toggle) toggle.classList.remove("expanded");
+        }
+      });
+      // Hide the whole device block when a filter is active and NONE of
+      // its rows match - keeps a large batch scannable instead of showing
+      // dozens of near-empty tables.
+      block.classList.toggle("filtered-empty", filterValue !== "all" && shownInBlock === 0);
+    });
+
+    // Device-level sort - re-append in the new order (appendChild moves
+    // existing nodes rather than cloning, so click handlers/state on them
+    // survive the reorder).
+    const sortValue = deviceSort ? deviceSort.value : "name";
+    const sorted = blocks.slice().sort((a, b) => {
+      switch (sortValue) {
+        case "open_desc": return (+b.dataset.open) - (+a.dataset.open);
+        case "manual_desc": return (+b.dataset.manual) - (+a.dataset.manual);
+        case "notautomated_desc": return (+b.dataset.notAutomated) - (+a.dataset.notAutomated);
+        case "errors_desc": return (+b.dataset.errors) - (+a.dataset.errors);
+        case "name":
+        default: return a.dataset.deviceName.localeCompare(b.dataset.deviceName);
+      }
+    });
+    sorted.forEach(b => container.appendChild(b));
+
+    if (note) {
+      note.textContent = filterValue !== "all"
+        ? `Showing ${shownRows} of ${totalRows} finding row(s) across all devices.`
+        : "";
+    }
+  }
+
+  document.getElementById("statusFilter").addEventListener("change", applyResultsView);
+  document.getElementById("deviceSort").addEventListener("change", applyResultsView);
 
   function escapeHtml(s) {
     const d = document.createElement("div");
