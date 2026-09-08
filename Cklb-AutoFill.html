@@ -223,6 +223,13 @@
   .section-toggle .chevron, .device-head .chevron { margin-right: 0.4rem; }
   .section-toggle.expanded .chevron, .device-head.expanded .chevron { transform: rotate(90deg); }
   .section-note { font-size: 0.75rem; color: var(--dim); font-style: italic; margin: 0.4rem 0; }
+  .no-evidence-list {
+    margin: 0.4rem 0 0.5rem;
+    padding-left: 1.2rem;
+    font-size: 0.78rem;
+    color: var(--dim);
+  }
+  .no-evidence-list li { padding: 0.15rem 0; }
   .results-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -246,8 +253,62 @@
     font-family: inherit;
   }
   .results-toolbar select:hover { border-color: var(--accent); }
+  .toolbar-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  .toolbar-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .self-test-panel {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .self-test-version { font-size: 0.72rem; color: var(--dim); font-family: var(--mono); }
+  #selfTestResults {
+    flex-basis: 100%;
+    margin-top: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.78rem;
+  }
+  .self-test-summary { font-weight: 600; margin-bottom: 0.5rem; }
+  .self-test-summary.all-pass { color: #4caf50; }
+  .self-test-summary.has-fail { color: var(--open); }
+  .self-test-row {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .self-test-row:last-child { border-bottom: none; }
+  .self-test-row .st-mark { flex-shrink: 0; width: 1.2em; }
+  .self-test-row.pass .st-mark { color: #4caf50; }
+  .self-test-row.fail .st-mark { color: var(--open); }
+  .self-test-row .st-name { color: var(--text); }
+  .self-test-row .st-rule { color: var(--dim); font-family: var(--mono); font-size: 0.72rem; }
+  .self-test-row .st-detail { color: var(--dim); font-size: 0.72rem; flex-basis: 100%; padding-left: 1.8em; }
   .toolbar-note { color: var(--dim); font-style: italic; }
   .device-block.filtered-empty { display: none; }
+  .load-error-detail {
+    background: rgba(224, 108, 108, 0.08);
+    border: 1px solid var(--open);
+    border-radius: 6px;
+    padding: 0.7rem 0.9rem;
+    font-size: 0.8rem;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
   .paste-toggle {
     display: flex; align-items: center;
     font-size: 0.82rem; color: var(--dim);
@@ -406,6 +467,8 @@
             <option value="errors_desc">Most Automation Errors first</option>
           </select>
         </label>
+        <button type="button" class="toolbar-btn" id="expandAllBtn">Expand all</button>
+        <button type="button" class="toolbar-btn" id="collapseAllBtn">Collapse all</button>
         <span class="toolbar-note" id="filterNote"></span>
       </div>
       <div id="deviceTables"></div>
@@ -415,6 +478,12 @@
 
   <div class="note">
     Every rule in the loaded cklb gets either a confident pass/fail, a "Manual Review" verdict with evidence attached, or is left fully untouched for genuine human judgment (the exact split is shown live above after you run - it depends on which STIG you load and which "Uncertain checks" you enable). Click any V-ID to see that rule's full title, discussion, check text, and fix text. Uncertain checks (panel above, all off by default) force-adjudicate a known-imperfect subset using bare presence/absence only - enable individually only where you've judged the trade-off acceptable for your environment. Always spot-check auto-filled results before submitting. Each device's output is named after its <code>hostname</code> line if found, otherwise after the config file's own name, and gets its own freshly generated checklist ID.
+  </div>
+
+  <div class="self-test-panel">
+    <button type="button" class="toolbar-btn" id="runSelfTestsBtn">Run self-tests</button>
+    <span class="self-test-version">Tool v<span id="selfTestVersion"></span></span>
+    <div id="selfTestResults" class="hidden"></div>
   </div>
 </div>
 
@@ -1476,10 +1545,31 @@
         : { match: false, confidence: "high", detail: `login block-for configured with attempts=${attempts} (> ${req.maxAttempts} allowed consecutive failures).`, evidence };
     },
 
+    "CISC-ND-000090": (cfg) => auditArchiveLogConfigEnabled(cfg, "account creation"),
+    "CISC-ND-000100": (cfg) => auditArchiveLogConfigEnabled(cfg, "account modification"),
+    "CISC-ND-000110": (cfg) => auditArchiveLogConfigEnabled(cfg, "account disabling"),
+    "CISC-ND-000120": (cfg) => auditArchiveLogConfigEnabled(cfg, "account removal"),
+
     "CISC-ND-000210": (cfg) => {
-      return /^logging userinfo/im.test(cfg)
-        ? { match: true, confidence: "high", detail: "'logging userinfo' is configured (logs privilege escalation)." }
-        : { match: false, confidence: "high", detail: "No 'logging userinfo' statement found." };
+      // This rule's own check text example shows BOTH pieces together
+      // ("logging userinfo" AND an archive/log config/logging enable
+      // block) - logging userinfo alone only catches privilege-escalation
+      // events, not the broader configuration-change audit trail the rule
+      // is actually asking for. An earlier version of this check only
+      // verified the first half.
+      const userinfoOk = /^logging userinfo/im.test(cfg);
+      const archiveResult = auditArchiveLogConfigEnabled(cfg, "administrator activity");
+      if (userinfoOk && archiveResult.match) {
+        return {
+          match: true, confidence: "high",
+          detail: "'logging userinfo' is configured (logs privilege escalation) AND the 'archive log config logging enable' block is present (logs configuration changes) - together these audit administrator activity as this rule's check text requires.",
+          evidence: ["logging userinfo", "archive", " log config", "  logging enable"]
+        };
+      }
+      const missing = [];
+      if (!userinfoOk) missing.push("'logging userinfo' (logs privilege escalation)");
+      if (!archiveResult.match) missing.push("'archive / log config / logging enable' (logs configuration changes)");
+      return { match: false, confidence: "high", detail: "Missing: " + missing.join(" and ") + "." };
     },
 
     "CISC-ND-000280": (cfg) => {
@@ -1487,6 +1577,10 @@
         ? { match: true, confidence: "high", detail: "'service timestamps log datetime' is configured." }
         : { match: false, confidence: "high", detail: "No 'service timestamps log datetime' statement found." };
     },
+
+    "CISC-ND-000330": (cfg) => auditArchiveLogConfigEnabled(cfg, "full-text recording of privileged commands"),
+
+    "CISC-ND-000880": (cfg) => auditArchiveLogConfigEnabled(cfg, "account enabling"),
 
     "CISC-ND-000980": (cfg) => {
       // No minimum buffer size is specified anywhere in check_content
@@ -1499,6 +1593,8 @@
         : { match: false, confidence: "high", detail: "No 'logging buffered <size>' statement found." };
     },
 
+    "CISC-ND-001250": (cfg) => auditArchiveLogConfigEnabled(cfg, "log records when administrator privileges are deleted"),
+
     "CISC-ND-001260": (cfg) => {
       const fail = /^login on-failure log/im.test(cfg);
       const success = /^login on-success log/im.test(cfg);
@@ -1508,6 +1604,8 @@
       if (!success) missing.push("login on-success log");
       return { match: false, detail: "Missing: " + missing.join(", ") };
     },
+
+    "CISC-ND-001270": (cfg) => auditArchiveLogConfigEnabled(cfg, "log records for privileged activities"),
 
     "CISC-ND-001370": (cfg) => {
       // "aaa authentication login default local" plus two radius/tacacs-
@@ -1726,6 +1824,37 @@
       : { match: false, detail: `Persistent logging is enabled; file privilege is set to ${priv} (weaker than the required 15).` };
   }
 
+  // -------------------------------------------------------------------
+  // Shared by 8 separate DISA rules (account creation/modification/
+  // disabling/removal/enabling audit, full-text privileged-command
+  // logging, and log records for privileged activity / deleted admin
+  // privileges) that all use the EXACT same check text and configuration
+  // example verbatim:
+  //   archive
+  //    log config
+  //     logging enable
+  // Each rule differs only in WHICH administrative action it's auditing,
+  // not in what config actually satisfies it - so one parser serves all
+  // eight, with activityLabel only changing the wording of the result.
+  // -------------------------------------------------------------------
+  function auditArchiveLogConfigEnabled(cfg, activityLabel) {
+    const blocks = parseConfigBlocks(cfg, /^archive\s*$/i);
+    if (blocks.length === 0) {
+      return { match: false, confidence: "high", detail: `No 'archive' block found in configuration - ${activityLabel} is not being automatically audited.` };
+    }
+    for (const b of blocks) {
+      const body = b.lines.join("\n");
+      if (/^\s*log config\b/im.test(body) && /^\s*logging enable\b/im.test(body)) {
+        return {
+          match: true, confidence: "high",
+          detail: `'archive' block includes 'log config' with 'logging enable' - ${activityLabel} is automatically audited via the archive log config mechanism.`,
+          evidence: ["archive", " log config", "  logging enable"]
+        };
+      }
+    }
+    return { match: false, confidence: "high", detail: `An 'archive' block exists, but it doesn't include both 'log config' and 'logging enable' - ${activityLabel} is not being automatically audited.` };
+  }
+
   // Generic common-criteria policy check driven entirely by CC_REQUIREMENTS -
   // a STIG revision to one of these thresholds is now a one-line data edit
   // instead of a hunt through six near-identical function bodies.
@@ -1794,8 +1923,31 @@
     };
 
     const usedOutputNames = new Map(); // base filename -> count seen so far, for collision-safe naming
+    const deviceLoadErrors = []; // devices that failed entirely, outside any individual rule check
 
     configFiles.forEach(cf => {
+      try {
+        processOneDevice(cf);
+      } catch (err) {
+        // A single malformed/unexpected config must never abort the whole
+        // batch - isolate the failure to this one device, surface it
+        // clearly, and keep processing the rest. Without this, one bad
+        // file out of 50 could silently cost you every other device's
+        // results too.
+        deviceLoadErrors.push({ name: cf.name, message: err.message });
+        deviceResults.push({
+          deviceName: cf.name,
+          outputName: null,
+          loadError: err.message,
+          filled: 0, na: 0, open: 0, naOther: 0, errorCount: 0,
+          manualVerdictCount: 0, notAutomatedCount: 0, manualTotal: 0,
+          rows: [], manualEvidence: [],
+          cklbJson: null
+        });
+      }
+    });
+
+    function processOneDevice(cf) {
       const configText = cf.text;
       const ccBlock = getCcPolicyBlock(configText);
       const fallbackName = cf.name.replace(/\.[^.]+$/, "");
@@ -1935,7 +2087,11 @@
         manualEvidence,
         cklbJson: JSON.stringify(cklb, null, 2)
       });
-    });
+    }
+
+    if (deviceLoadErrors.length > 0) {
+      alert(`${deviceLoadErrors.length} device(s) failed to process and were skipped: ${deviceLoadErrors.map(e => e.name).join(", ")}. The rest of the batch still completed - see the results below for details on each failure.`);
+    }
 
     renderResults(deviceResults, grandFilled, grandNA, grandOpen, grandErrors, grandManualVerdict, grandNotAutomated, ruleCounts);
     prepareDownload(deviceResults);
@@ -2047,6 +2203,20 @@
       block.dataset.notAutomated = dev.notAutomatedCount;
       block.dataset.errors = dev.errorCount;
 
+      if (dev.loadError) {
+        // This device never got past initial processing (bad encoding,
+        // unexpected exception, etc) - a distinct, unmistakable card
+        // instead of empty tables, and exempted from the status filter's
+        // "hide devices with zero matching rows" behavior below, since it
+        // has no rows to match in the first place but is exactly the kind
+        // of thing you don't want silently filtered out of view.
+        block.dataset.loadError = "1";
+        block.innerHTML = `<div class="device-head" style="cursor:default;"><h3 style="padding-left:1.4em;">${escapeHtml(dev.deviceName)}</h3><span class="counts status error">FAILED TO PROCESS</span></div>` +
+          `<div class="load-error-detail">This device could not be processed and was skipped - the rest of the batch still completed. Error: ${escapeHtml(dev.loadError)}</div>`;
+        container.appendChild(block);
+        return;
+      }
+
       // Main findings table is now collapsible - click the device header to
       // show/hide it, same interaction pattern as the "Uncertain checks"
       // panel above. Defaults to expanded so nothing changes for anyone
@@ -2092,14 +2262,20 @@
       const possibleMatchesWereSearched = dev.manualEvidence.length > 0 || dev.notAutomatedCount === 0;
 
       if (withEvidence.length > 0) {
-        // Same collapsible pattern for the possible-matches section - click
-        // the subhead to show/hide its table.
+        // Same collapsible pattern as the main findings table, but this one
+        // defaults COLLAPSED, not expanded: these are, by definition,
+        // incomplete checks (no automated adjudication ran at all - the
+        // main table already covers everything that actually got a
+        // determination). Keeping this closed by default means opening a
+        // batch of results leads with what's actually decided, not with
+        // a pile of "maybe relevant" anchors competing for attention.
         const sub = document.createElement("div");
-        sub.className = "subhead section-toggle expanded";
+        sub.className = "subhead section-toggle";
         sub.innerHTML = `${CHEVRON_SVG}Not automated — possible matching config lines (informational only) (${withEvidence.length} of ${dev.manualEvidence.length} rules have matching lines)`;
         block.appendChild(sub);
 
         const matchWrap = document.createElement("div");
+        matchWrap.classList.add("hidden");
         const mTable = document.createElement("table");
         const mBody = document.createElement("tbody");
         mTable.innerHTML = `<thead><tr><th>V-ID (click to expand)</th><th>Rule</th><th>Possible matching config lines (informational)</th></tr></thead>`;
@@ -2129,24 +2305,34 @@
       }
 
       if (possibleMatchesWereSearched && withoutEvidence.length > 0) {
-        const details = document.createElement("details");
-        details.style.marginTop = "0.5rem";
-        details.style.fontSize = "0.8rem";
-        details.style.color = "var(--dim)";
-        const summary = document.createElement("summary");
-        summary.style.cursor = "pointer";
-        summary.textContent = `Not automated — no matching configuration evidence found (${withoutEvidence.length})`;
-        details.appendChild(summary);
+        // Same collapsible pattern (and same custom SVG chevron) as every
+        // other section, rather than a native <details>/<summary> - that
+        // element brings the browser's own tiny built-in disclosure
+        // triangle, which renders visibly smaller/different than our SVG
+        // chevron used everywhere else, an inconsistency worth avoiding.
+        // Defaults collapsed for the same reason as the possible-matches
+        // section above: this is explicitly a "nothing found" list, lower
+        // priority than an actual determination.
+        const noEvSub = document.createElement("div");
+        noEvSub.className = "subhead section-toggle";
+        noEvSub.innerHTML = `${CHEVRON_SVG}Not automated — no matching configuration evidence found (${withoutEvidence.length})`;
+        block.appendChild(noEvSub);
+
+        const noEvWrap = document.createElement("div");
+        noEvWrap.classList.add("hidden");
         const list = document.createElement("ul");
-        list.style.margin = "0.5rem 0 0";
-        list.style.paddingLeft = "1.2rem";
+        list.className = "no-evidence-list";
         withoutEvidence.forEach(m => {
           const li = document.createElement("li");
           li.textContent = `${m.vid} — ${m.title}${m.disabledByToggle ? " (check disabled)" : ""}`;
           list.appendChild(li);
         });
-        details.appendChild(list);
-        block.appendChild(details);
+        noEvWrap.appendChild(list);
+        block.appendChild(noEvWrap);
+        noEvSub.addEventListener("click", () => {
+          noEvWrap.classList.toggle("hidden");
+          noEvSub.classList.toggle("expanded");
+        });
       }
 
       container.appendChild(block);
@@ -2199,8 +2385,11 @@
       });
       // Hide the whole device block when a filter is active and NONE of
       // its rows match - keeps a large batch scannable instead of showing
-      // dozens of near-empty tables.
-      block.classList.toggle("filtered-empty", filterValue !== "all" && shownInBlock === 0);
+      // dozens of near-empty tables. A load-error device never has any
+      // data-status rows at all, but that's a reason to keep it visible,
+      // not hide it - exempt it from this rule.
+      const isLoadError = block.dataset.loadError === "1";
+      block.classList.toggle("filtered-empty", !isLoadError && filterValue !== "all" && shownInBlock === 0);
     });
 
     // Device-level sort - re-append in the new order (appendChild moves
@@ -2228,6 +2417,32 @@
 
   document.getElementById("statusFilter").addEventListener("change", applyResultsView);
   document.getElementById("deviceSort").addEventListener("change", applyResultsView);
+
+  // -------------------------------------------------------------------
+  // Expand all / Collapse all - operates on every collapsible section
+  // currently in the DOM (device-head + its findings table, and each
+  // possible-matches subhead + its table). Load-error cards are skipped -
+  // they aren't collapsible sections, they're a fixed-visibility error
+  // notice, so toggling them would just make the error message disappear.
+  // -------------------------------------------------------------------
+  function setAllSectionsExpanded(expand) {
+    const container = document.getElementById("deviceTables");
+    container.querySelectorAll(".device-head").forEach(head => {
+      if (head.style.cursor === "default") return; // load-error card, not collapsible
+      const wrap = head.nextElementSibling;
+      if (!wrap) return;
+      head.classList.toggle("expanded", expand);
+      wrap.classList.toggle("hidden", !expand);
+    });
+    container.querySelectorAll(".subhead.section-toggle").forEach(sub => {
+      const wrap = sub.nextElementSibling;
+      if (!wrap) return;
+      sub.classList.toggle("expanded", expand);
+      wrap.classList.toggle("hidden", !expand);
+    });
+  }
+  document.getElementById("expandAllBtn").addEventListener("click", () => setAllSectionsExpanded(true));
+  document.getElementById("collapseAllBtn").addEventListener("click", () => setAllSectionsExpanded(false));
 
   function escapeHtml(s) {
     const d = document.createElement("div");
@@ -2328,15 +2543,23 @@
 
   function prepareDownload(deviceResults) {
     const link = document.getElementById("downloadLink");
+    // Devices that failed entirely (see deviceLoadErrors) have no cklbJson
+    // to write - they were surfaced as an error card in the results
+    // instead, and shouldn't produce a phantom/empty file in the download.
+    const downloadable = deviceResults.filter(d => d.cklbJson);
 
-    if (deviceResults.length === 1) {
+    if (downloadable.length === 0) {
+      link.classList.add("hidden");
+      return;
+    }
+    if (downloadable.length === 1) {
       // Single device - just download the .cklb directly, no zip needed.
-      const blob = new Blob([deviceResults[0].cklbJson], { type: "application/json" });
+      const blob = new Blob([downloadable[0].cklbJson], { type: "application/json" });
       link.href = URL.createObjectURL(blob);
-      link.download = deviceResults[0].outputName;
-      link.textContent = "Download " + deviceResults[0].outputName;
+      link.download = downloadable[0].outputName;
+      link.textContent = "Download " + downloadable[0].outputName;
     } else {
-      const zipFiles = deviceResults.map(d => ({
+      const zipFiles = downloadable.map(d => ({
         name: d.outputName,
         data: new TextEncoder().encode(d.cklbJson)
       }));
@@ -2344,10 +2567,194 @@
       const blob = new Blob([zipBytes], { type: "application/zip" });
       link.href = URL.createObjectURL(blob);
       link.download = "filled_cklbs.zip";
-      link.textContent = `Download ${deviceResults.length} filled .cklb files (.zip)`;
+      link.textContent = `Download ${downloadable.length} filled .cklb file${downloadable.length === 1 ? "" : "s"} (.zip)`;
     }
     link.classList.remove("hidden");
   }
+
+  // -------------------------------------------------------------------
+  // Embedded regression suite. Every case here is a real bug found and
+  // fixed during this tool's development - each config snippet is the
+  // minimal input that used to produce a wrong verdict before its fix.
+  // This is a floor, not a ceiling: it only catches regressions of issues
+  // already found, not new ones. When a future bug gets fixed, add its
+  // case here so it can never silently come back.
+  // -------------------------------------------------------------------
+  const TEST_CASES = [
+    { name: "000010: split vty ranges, both restricted", ruleId: "CISC-ND-000010",
+      config: "line vty 0 4\n transport input none\n!\nline vty 5 15\n transport input none\n!\n",
+      expectStatusKind: "pass" },
+    { name: "000010: bare session-limit with no configured ceiling defers to manual", ruleId: "CISC-ND-000010",
+      config: "line vty 0 4\n session-limit 2\n!\nline vty 5 15\n transport input none\n!\n",
+      expectStatusKind: "manual" },
+    { name: "000010: no restriction on either vty block", ruleId: "CISC-ND-000010",
+      config: "line vty 0 4\n transport input ssh\n!\n",
+      expectStatusKind: "fail" },
+
+    { name: "000160: banner text extracted past a ^ delimiter", ruleId: "CISC-ND-000160",
+      config: "banner login ^\nUnauthorized access prohibited.\n^\n",
+      expectStatusKind: "manual", expectEvidenceContains: "Unauthorized access prohibited" },
+    { name: "000160: no banner at all", ruleId: "CISC-ND-000160",
+      config: "hostname X\n",
+      expectStatusKind: "fail" },
+
+    { name: "000470: explicitly disabled services aren't flagged", ruleId: "CISC-ND-000470",
+      config: "no ip http server\nno ip http secure-server\n",
+      expectStatusKind: "pass" },
+
+    { name: "000490: more than one account defers to manual, not auto-Open", ruleId: "CISC-ND-000490",
+      config: "username admin secret 5 aaa\nusername backup secret 5 bbb\n",
+      expectStatusKind: "manual" },
+
+    { name: "000550: min-length 15 passes", ruleId: "CISC-ND-000550",
+      config: "aaa common-criteria policy PW\n min-length 15\n!\n",
+      expectStatusKind: "pass" },
+    { name: "000550: min-length 8 fails", ruleId: "CISC-ND-000550",
+      config: "aaa common-criteria policy PW\n min-length 8\n!\n",
+      expectStatusKind: "fail" },
+
+    { name: "000620: Type 5 hash is compliant per this rule's own check text", ruleId: "CISC-ND-000620",
+      config: "service password-encryption\nenable secret 5 xxxxxxxx\n",
+      expectStatusKind: "pass" },
+    { name: "000620: no service password-encryption fails", ruleId: "CISC-ND-000620",
+      config: "enable secret 5 xxxxxxxx\n",
+      expectStatusKind: "fail" },
+
+    { name: "000720 (V-220544): exec-timeout ok + HTTP explicitly disabled", ruleId: "CISC-ND-000720",
+      config: "line con 0\n exec-timeout 5 0\n!\nline vty 0 4\n exec-timeout 5 0\n!\nno ip http server\nno ip http secure-server\n",
+      expectStatusKind: "pass" },
+    { name: "000720: HTTP enabled with no timeout-policy is Open", ruleId: "CISC-ND-000720",
+      config: "line con 0\n exec-timeout 5 0\n!\nline vty 0 4\n exec-timeout 5 0\n!\nip http secure-server\n",
+      expectStatusKind: "fail" },
+    { name: "000720: HTTP enable/disable state ambiguous defers to manual", ruleId: "CISC-ND-000720",
+      config: "line con 0\n exec-timeout 5 0\n!\nline vty 0 4\n exec-timeout 5 0\n!\n",
+      expectStatusKind: "manual" },
+
+    { name: "001030: vrf-scoped server counts as a second unique source", ruleId: "CISC-ND-001030",
+      config: "ntp server 10.1.1.1\nntp server vrf MGMT 10.1.1.2\n",
+      expectStatusKind: "pass" },
+    { name: "001030: only one unique server fails", ruleId: "CISC-ND-001030",
+      config: "ntp server 10.1.1.1\n",
+      expectStatusKind: "fail" },
+
+    { name: "001150: one authenticated + one unauthenticated server fails", ruleId: "CISC-ND-001150",
+      config: "ntp authenticate\nntp authentication-key 5 sha1 xxx\nntp trusted-key 5\nntp server 10.1.1.1 key 5\nntp server 10.1.1.2\n",
+      expectStatusKind: "fail" },
+
+    { name: "001200: no explicit ssh version defers to manual (not auto-Open)", ruleId: "CISC-ND-001200",
+      config: "hostname x\n",
+      expectStatusKind: "manual" },
+    { name: "001200: version set, no explicit MAC restriction defers to manual", ruleId: "CISC-ND-001200",
+      config: "ip ssh version 2\n",
+      expectStatusKind: "manual" },
+    { name: "001200: explicit weak MAC is Open", ruleId: "CISC-ND-001200",
+      config: "ip ssh version 2\nip ssh server algorithm mac hmac-sha1\n",
+      expectStatusKind: "fail" },
+
+    { name: "001370 (V-220617): modern 'tacacs server NAME / address ipv4' syntax", ruleId: "CISC-ND-001370",
+      config: "aaa new-model\naaa authentication login default group tacacs+ local\ntacacs server T1\n address ipv4 10.0.0.1\n!\ntacacs server T2\n address ipv4 10.0.0.2\n!\n",
+      expectStatusKind: "pass" },
+    { name: "001370 (V-220565): 'aaa group server tacacs+ / server-private' syntax", ruleId: "CISC-ND-001370",
+      config: "aaa new-model\naaa authentication login default group tacacs+ local\naaa group server tacacs+ tacacs\n server-private 1.1.1.1 key 7 x\n server-private 2.2.2.2 key 7 x\n",
+      expectStatusKind: "pass" },
+    { name: "001370: custom-named AAA group resolves to its declared type", ruleId: "CISC-ND-001370",
+      config: "aaa new-model\naaa authentication login default group CorpAAA local\naaa group server tacacs+ CorpAAA\n server-private 5.5.5.5 key 7 x\n server-private 6.6.6.6 key 7 x\n",
+      expectStatusKind: "pass" },
+    { name: "001370: 1 TACACS+ + 1 RADIUS doesn't satisfy either's redundancy", ruleId: "CISC-ND-001370",
+      config: "aaa new-model\naaa authentication login default group tacacs+ local\ntacacs-server host 10.0.0.1\nradius-server host 10.0.0.2\n",
+      expectStatusKind: "fail" },
+
+    { name: "000090: archive log config logging enable present", ruleId: "CISC-ND-000090",
+      config: "archive\n log config\n  logging enable\n!\n",
+      expectStatusKind: "pass" },
+    { name: "000090: no archive block fails", ruleId: "CISC-ND-000090",
+      config: "hostname x\n",
+      expectStatusKind: "fail" },
+    { name: "000100: shared archive helper wired correctly", ruleId: "CISC-ND-000100",
+      config: "archive\n log config\n  logging enable\n!\n", expectStatusKind: "pass" },
+    { name: "000110: shared archive helper wired correctly", ruleId: "CISC-ND-000110",
+      config: "archive\n log config\n  logging enable\n!\n", expectStatusKind: "pass" },
+    { name: "000120: shared archive helper wired correctly", ruleId: "CISC-ND-000120",
+      config: "archive\n log config\n  logging enable\n!\n", expectStatusKind: "pass" },
+    { name: "000330: shared archive helper wired correctly", ruleId: "CISC-ND-000330",
+      config: "archive\n log config\n  logging enable\n!\n", expectStatusKind: "pass" },
+    { name: "000880: shared archive helper wired correctly", ruleId: "CISC-ND-000880",
+      config: "archive\n log config\n  logging enable\n!\n", expectStatusKind: "pass" },
+    { name: "001250: shared archive helper wired correctly", ruleId: "CISC-ND-001250",
+      config: "archive\n log config\n  logging enable\n!\n", expectStatusKind: "pass" },
+    { name: "001270: shared archive helper wired correctly", ruleId: "CISC-ND-001270",
+      config: "archive\n log config\n  logging enable\n!\n", expectStatusKind: "pass" },
+
+    { name: "000210: logging userinfo alone is not sufficient", ruleId: "CISC-ND-000210",
+      config: "logging userinfo\n",
+      expectStatusKind: "fail" },
+    { name: "000210: both logging userinfo AND archive block present", ruleId: "CISC-ND-000210",
+      config: "logging userinfo\narchive\n log config\n  logging enable\n!\n",
+      expectStatusKind: "pass" }
+  ];
+
+  function runSelfTests() {
+    return TEST_CASES.map(tc => {
+      let statusKindActual = null, detailActual = "", evidenceActual = [], errorMsg = null;
+      try {
+        const cc = getCcPolicyBlock(tc.config);
+        const raw = RULE_CHECKS[tc.ruleId](tc.config, cc);
+        if (raw == null) {
+          statusKindActual = "(declined)";
+        } else {
+          const norm = normalizeCheckResult(raw);
+          statusKindActual = norm.statusKind;
+          detailActual = norm.detail;
+          evidenceActual = norm.evidence || [];
+        }
+      } catch (e) {
+        errorMsg = e.message;
+      }
+
+      let pass = true;
+      const reasons = [];
+      if (errorMsg) {
+        pass = false;
+        reasons.push("threw an error: " + errorMsg);
+      } else {
+        if (tc.expectStatusKind && statusKindActual !== tc.expectStatusKind) {
+          pass = false;
+          reasons.push(`expected status "${tc.expectStatusKind}", got "${statusKindActual}"`);
+        }
+        if (tc.expectEvidenceContains) {
+          const hay = (evidenceActual.join(" | ") + " " + detailActual).toLowerCase();
+          if (!hay.includes(tc.expectEvidenceContains.toLowerCase())) {
+            pass = false;
+            reasons.push(`expected evidence/detail to mention "${tc.expectEvidenceContains}"`);
+          }
+        }
+      }
+
+      return { name: tc.name, ruleId: tc.ruleId, pass, actual: errorMsg ? ("error: " + errorMsg) : statusKindActual, reasons };
+    });
+  }
+
+  const selfTestVersionEl = document.getElementById("selfTestVersion");
+  if (selfTestVersionEl) selfTestVersionEl.textContent = TOOL_VERSION;
+
+  document.getElementById("runSelfTestsBtn").addEventListener("click", () => {
+    const results = runSelfTests();
+    const panel = document.getElementById("selfTestResults");
+    panel.classList.remove("hidden");
+    const passCount = results.filter(r => r.pass).length;
+    const allPass = passCount === results.length;
+    const rowsHtml = results.map(r => {
+      const mark = r.pass ? "✓" : "✗";
+      const reasonHtml = (!r.pass && r.reasons.length) ? `<div class="st-detail">${escapeHtml(r.reasons.join("; "))}</div>` : "";
+      return `<div class="self-test-row ${r.pass ? "pass" : "fail"}">` +
+        `<span class="st-mark">${mark}</span>` +
+        `<span class="st-name">${escapeHtml(r.name)}</span>` +
+        `<span class="st-rule">${escapeHtml(r.ruleId)}</span>` +
+        reasonHtml +
+        `</div>`;
+    }).join("");
+    panel.innerHTML = `<div class="self-test-summary ${allPass ? "all-pass" : "has-fail"}">${passCount} / ${results.length} passed</div>` + rowsHtml;
+  });
 })();
 </script>
 </body>
