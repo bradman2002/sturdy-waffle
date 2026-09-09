@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-Checklist STIG Editor</title>
+<style>
+  :root {
+    --bg: #14181f;
+    --panel: #1b212a;
+    --panel2: #10141a;
+    --border: #2a323d;
+    --text: #d6dde5;
+    --dim: #8894a3;
+    --accent: #4a9eda;
+    --ok: #3fb950;
+    --open: #e5534b;
+    --na: #9aa4b2;
+    --mono: "SF Mono", "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    font-size: 13px;
+  }
+  button, select, input, textarea { font-family: inherit; color: inherit; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  .hidden { display: none !important; }
+
+  /* ---------------- Title bar ---------------- */
+  .titlebar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.55rem 1rem;
+    background: var(--panel2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .titlebar h1 { font-size: 0.95rem; margin: 0; font-weight: 600; letter-spacing: 0.01em; white-space: nowrap; }
+  .titlebar .sub { color: var(--dim); font-size: 0.72rem; white-space: nowrap; }
+  .spacer { flex: 1; }
+  .global-stats { display: flex; gap: 0.9rem; font-size: 0.74rem; color: var(--dim); white-space: nowrap; }
+  .global-stats b { font-family: var(--mono); }
+  .global-stats .gs-open b { color: var(--open); }
+  .global-stats .gs-naf b { color: var(--ok); }
+  .global-stats .gs-nr b { color: var(--accent); }
+  .global-stats .gs-na b { color: var(--na); }
+
+  .btn {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #06131f; border-color: var(--accent); font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn:disabled:hover { border-color: var(--border); }
+  #fileInput { display: none; }
+
+  /* ---------------- Tab bar ---------------- */
+  .tab-bar {
+    display: flex;
+    align-items: stretch;
+    background: var(--panel2);
+    border-bottom: 1px solid var(--border);
+    padding: 0 0.4rem;
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border);
+    color: var(--dim);
+    padding: 0.55rem 0.9rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 220px;
+  }
+  .tab:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .tab.active { color: var(--text); background: var(--bg); font-weight: 600; }
+  .tab .dirty-dot { margin-left: 0.1rem; color: var(--accent); }
+  .tab-badge {
+    font-family: var(--mono);
+    font-size: 0.63rem;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 0.05rem 0.4rem;
+  }
+  .tab-badge-open { background: rgba(229,83,75,0.18); color: var(--open); }
+  .tab-close { color: var(--dim); font-size: 0.9rem; line-height: 1; padding: 0 0.1rem; border-radius: 4px; }
+  .tab-close:hover { color: var(--open); background: rgba(229,83,75,0.12); }
+  .tab-add {
+    background: transparent;
+    border: none;
+    color: var(--dim);
+    font-size: 1.1rem;
+    padding: 0.3rem 0.7rem;
+    cursor: pointer;
+    align-self: center;
+  }
+  .tab-add:hover { color: var(--text); }
+
+  /* ---------------- Toolbar ---------------- */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.9rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .toolbar-title { font-weight: 600; font-size: 0.82rem; white-space: nowrap; }
+  .toolbar input[type=search], .toolbar select {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.78rem;
+  }
+  .toolbar input[type=search] { width: 170px; }
+  .cat-tabs { display: flex; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .cat-tabs button {
+    background: transparent;
+    border: none;
+    color: var(--dim);
+    padding: 0.35rem 0.7rem;
+    font-size: 0.76rem;
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+  }
+  .cat-tabs button:last-child { border-right: none; }
+  .cat-tabs button.active { background: var(--accent); color: #06131f; font-weight: 600; }
+  .result-count { font-size: 0.74rem; color: var(--dim); white-space: nowrap; }
+
+  /* ---------------- Bulk bar ---------------- */
+  .bulk-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding: 0.5rem 0.9rem;
+    background: rgba(74,158,218,0.08);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+    flex-shrink: 0;
+  }
+  .bulk-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .bulk-field-label { color: var(--dim); font-size: 0.76rem; white-space: nowrap; }
+  .bulk-bar b { font-family: var(--mono); }
+  .bulk-bar select, .bulk-bar input[type=text] {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.32rem 0.5rem;
+    font-size: 0.78rem;
+  }
+  .bulk-bar input[type=text] { flex: 1; min-width: 120px; max-width: 220px; }
+
+  /* ---------------- Main body: 3 columns ---------------- */
+  .main-body { flex: 1; display: flex; min-height: 0; }
+
+  .rule-list-col { width: 300px; flex-shrink: 0; background: var(--panel2); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .rule-list-head {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--dim);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+  }
+  .rule-list { flex: 1; overflow-y: auto; }
+  .rule-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.55rem 0.8rem;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    border-left: 3px solid transparent;
+  }
+  .rule-item:hover { background: rgba(255,255,255,0.03); }
+  .rule-item.active { background: rgba(74,158,218,0.14); border-left-color: var(--accent); }
+  .rule-item.multiselected:not(.active) { background: rgba(74,158,218,0.06); }
+  .rule-item .ri-icon { flex-shrink: 0; margin-top: 0.1rem; }
+  .rule-item .ri-vid { font-weight: 700; font-size: 0.8rem; }
+  .rule-item .ri-title {
+    color: var(--dim);
+    font-size: 0.74rem;
+    margin-top: 0.1rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .rule-item .ri-asset { color: var(--accent); font-size: 0.68rem; margin-top: 0.15rem; }
+  .rule-list-empty { padding: 1.2rem; color: var(--dim); font-size: 0.8rem; text-align: center; }
+
+  .detail-col { flex: 1; overflow-y: auto; padding: 1.4rem 2rem 2rem; min-width: 0; }
+  .detail-empty { color: var(--dim); font-size: 0.9rem; text-align: center; margin-top: 3rem; }
+  .detail-header { text-align: center; margin-bottom: 1.2rem; }
+  .detail-header h2 { margin: 0 0 0.2rem; font-size: 1.05rem; }
+  .detail-header .stig-version { color: var(--dim); font-size: 0.76rem; }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.9rem 1.5rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .meta-grid .mi label { display: block; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin-bottom: 0.2rem; }
+  .meta-grid .mi div { font-size: 0.82rem; }
+  .meta-grid .mi .sev-pill { font-weight: 700; }
+  .dsec { margin-bottom: 1.1rem; }
+  .dsec h3 { font-size: 0.8rem; font-weight: 700; margin: 0 0 0.35rem; }
+  .dsec .body { font-size: 0.82rem; line-height: 1.55; white-space: pre-wrap; }
+  .dsec .body.mono { font-family: var(--mono); font-size: 0.78rem; }
+  .refs-title { font-weight: 700; text-align: center; margin: 1.4rem 0 0.8rem; font-size: 0.95rem; }
+  .cci-box { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 0.7rem; overflow: hidden; }
+  .cci-box .cci-head { background: #1c3a44; color: #bfe6f2; font-family: var(--mono); font-weight: 700; padding: 0.4rem 0.7rem; font-size: 0.78rem; }
+  .cci-box .cci-body { padding: 0.6rem 0.7rem; font-size: 0.8rem; line-height: 1.5; }
+  .cci-box .cci-body ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
+  .cci-box .cci-body .no-data { color: var(--dim); font-style: italic; }
+
+  /* ---------------- Side panel ---------------- */
+  .side-col { width: 300px; flex-shrink: 0; background: var(--panel2); border-left: 1px solid var(--border); overflow-y: auto; padding: 1rem; }
+  .donut-wrap { display: flex; justify-content: center; margin-bottom: 0.7rem; }
+  .donut-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 0.8rem; font-size: 0.74rem; margin-bottom: 1rem; }
+  .donut-legend .leg-item { display: flex; align-items: center; gap: 0.4rem; }
+  .donut-legend .swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .donut-legend .leg-n { font-family: var(--mono); font-weight: 700; }
+  .score-row { margin-bottom: 1.2rem; }
+  .score-row .score-label { font-size: 0.7rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; display: flex; justify-content: space-between; }
+  .score-bar { height: 6px; background: var(--panel); border-radius: 4px; overflow: hidden; margin-top: 0.3rem; }
+  .score-bar > div { height: 100%; background: var(--accent); }
+  .field-group { margin-bottom: 0.9rem; }
+  .field-group label { display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin-bottom: 0.25rem; }
+  .field-group input[type=text], .field-group select, .field-group textarea {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.78rem;
+  }
+  .field-group textarea { resize: vertical; min-height: 50px; }
+  .checkbox-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; margin-bottom: 0.9rem; }
+  .side-note { color: var(--dim); font-size: 0.78rem; text-align: center; padding: 1.5rem 0.5rem; }
+
+  /* ---------------- Bottom bar ---------------- */
+  .bottom-bar {
+    display: flex;
+    flex-shrink: 0;
+    height: 150px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .bottom-col { flex: 1; display: flex; flex-direction: column; padding: 0.6rem 0.9rem; min-width: 0; }
+  .bottom-col:first-child { border-right: 1px solid var(--border); }
+  .bottom-col label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin-bottom: 0.35rem; }
+  .bottom-col textarea {
+    flex: 1;
+    resize: none;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.5rem 0.6rem;
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
+  .bottom-col textarea:disabled { opacity: 0.5; }
+
+  /* ---------------- Empty state ---------------- */
+  .empty-hint {
+    margin: auto;
+    max-width: 480px;
+    text-align: center;
+    color: var(--dim);
+    font-size: 0.88rem;
+    line-height: 1.6;
+    padding: 2rem;
+  }
+  .empty-hint h2 { color: var(--text); font-size: 1.1rem; margin-bottom: 0.6rem; }
+  .dropzone {
+    border: 1.5px dashed var(--border);
+    border-radius: 8px;
+    padding: 1.4rem;
+    cursor: pointer;
+    margin: 1.2rem 0;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: rgba(74,158,218,0.06); }
+  .dropzone strong { color: var(--text); }
+
+  .toast-wrap { position: fixed; bottom: 1rem; right: 1rem; z-index: 30; display: flex; flex-direction: column; gap: 0.5rem; }
+  .toast {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--open);
+    border-radius: 6px;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.8rem;
+    max-width: 340px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+
+  /* ---------------- Status icon (shared: rule list + click-to-cycle) ---------------- */
+  .status-icon-btn { background: none; border: none; cursor: pointer; padding: 0; display: inline-flex; line-height: 0; }
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <h1>Multi-Checklist STIG Editor</h1>
+  <span class="sub">not affiliated with DISA's STIG Viewer — styled to match it</span>
+  <div class="spacer"></div>
+  <div class="global-stats" id="globalStats"></div>
+  <button class="btn primary" id="saveAllBtn" disabled>Save All</button>
+</div>
+
+<div class="tab-bar hidden" id="tabBar"></div>
+
+<div class="toolbar hidden" id="toolbar">
+  <span class="toolbar-title">Checklist Rules</span>
+  <input type="search" id="searchInput" placeholder="Search Vuln IDs or title (comma/space = multiple)…">
+  <select id="statusFilter">
+    <option value="all">All statuses</option>
+    <option value="not_reviewed">Not Reviewed</option>
+    <option value="open">Open</option>
+    <option value="not_a_finding">Not a Finding</option>
+    <option value="not_applicable">Not Applicable</option>
+  </select>
+  <div class="cat-tabs" id="catTabs">
+    <button data-cat="all" class="active">All</button>
+    <button data-cat="high">Cat I</button>
+    <button data-cat="medium">Cat II</button>
+    <button data-cat="low">Cat III</button>
+  </div>
+  <div class="spacer"></div>
+  <span class="result-count" id="resultCount"></span>
+  <button class="btn" id="selectAllVisibleBtn">Select all</button>
+  <button class="btn" id="importBtn">Import</button>
+  <button class="btn" id="exportBtn">Export</button>
+  <button class="btn" id="saveBtn">&#128190; Save</button>
+</div>
+
+<div class="bulk-bar hidden" id="bulkBar">
+  <div class="bulk-row">
+    <span><b id="selCount">0</b> selected</span>
+    <select id="bulkStatus">
+      <option value="">Set status…</option>
+      <option value="not_reviewed">Not Reviewed</option>
+      <option value="open">Open</option>
+      <option value="not_a_finding">Not a Finding</option>
+      <option value="not_applicable">Not Applicable</option>
+    </select>
+    <button class="btn" id="bulkApplyStatusBtn">Apply</button>
+    <div class="spacer"></div>
+    <button class="btn" id="clearSelectionBtn">Clear selection</button>
+  </div>
+  <div class="bulk-row">
+    <span class="bulk-field-label">Comments:</span>
+    <input type="text" id="bulkCommentsText" placeholder="Text…">
+    <button class="btn" id="bulkCommentsAppendBtn" title="Add this text onto the end of the existing comments">Append</button>
+    <button class="btn" id="bulkCommentsReplaceBtn" title="Overwrite the existing comments with this text">Replace</button>
+    <span class="bulk-field-label">Finding Details:</span>
+    <input type="text" id="bulkFindingText" placeholder="Text…">
+    <button class="btn" id="bulkFindingAppendBtn" title="Add this text onto the end of the existing finding details">Append</button>
+    <button class="btn" id="bulkFindingReplaceBtn" title="Overwrite the existing finding details with this text">Replace</button>
+  </div>
+</div>
+
+<div class="main-body">
+  <div class="empty-hint" id="emptyHint">
+    <h2>No checklists loaded</h2>
+    <p>Load one or more <code>.cklb</code> files — each opens in its own tab, plus an "All checklists" tab for reviewing everything together. Click a status icon to cycle Not Reviewed → Not a Finding → Open → Not Applicable; Shift/Ctrl(⌘)+click rows to select several and bulk-apply a status or comment. Everything stays in your browser; nothing is uploaded anywhere.</p>
+    <div class="dropzone" id="dropzone">
+      <strong>Drop .cklb files here</strong><br>or click to browse
+    </div>
+    <p id="saveCapabilityNote" style="font-size:0.78rem;"></p>
+  </div>
+
+  <div class="rule-list-col hidden" id="ruleListColWrap">
+    <div class="rule-list-head"><span>Group ID</span><span id="ruleListCount"></span></div>
+    <div class="rule-list" id="ruleList"></div>
+  </div>
+
+  <div class="detail-col hidden" id="detailCol">
+    <div class="detail-empty" id="detailEmpty">Select a rule from the list to view its details.</div>
+    <div id="detailContent" class="hidden">
+      <div class="detail-header">
+        <h2 id="dStigName"></h2>
+        <div class="stig-version" id="dStigVersion"></div>
+      </div>
+      <div class="meta-grid">
+        <div class="mi"><label>Group ID</label><div id="mGroupId"></div></div>
+        <div class="mi"><label>Rule ID</label><div id="mRuleId"></div></div>
+        <div class="mi"><label>STIG ID</label><div id="mStigId"></div></div>
+        <div class="mi"><label>SRG ID</label><div id="mSrgId"></div></div>
+        <div class="mi"><label>Severity</label><div id="mSeverity"></div></div>
+        <div class="mi"><label>Legacy IDs</label><div id="mLegacy"></div></div>
+        <div class="mi"><label>Classification</label><div id="mClass"></div></div>
+      </div>
+      <div class="dsec"><h3>Rule Title:</h3><div class="body" id="dRuleTitle"></div></div>
+      <div class="dsec"><h3>Discussion:</h3><div class="body" id="dDiscussion"></div></div>
+      <div class="dsec"><h3>Check Text:</h3><div class="body mono" id="dCheck"></div></div>
+      <div class="dsec"><h3>Fix Text:</h3><div class="body mono" id="dFix"></div></div>
+      <div id="refsWrap">
+        <div class="refs-title">References</div>
+        <div id="dCciList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="side-col hidden" id="sideCol"></div>
+</div>
+
+<div class="bottom-bar hidden" id="bottomBar">
+  <div class="bottom-col">
+    <label>Comments</label>
+    <textarea id="dComments" disabled placeholder="Reviewer comments…"></textarea>
+  </div>
+  <div class="bottom-col">
+    <label>Finding Details</label>
+    <textarea id="dFindingDetails" disabled placeholder="Document evidence supporting the status above…"></textarea>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".cklb,.json,application/json" multiple>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ===================================================================
+  // State
+  // ===================================================================
+  // checklists: [{ id, fileName, data, included, dirty, handle }]
+  let checklists = [];
+  let selectedKeys = new Set();     // "checklistId::stigIdx::ruleIdx" — for bulk actions
+  let activeRuleKey = null;         // the one rule shown in the detail/side/bottom panels
+  let selectionAnchorKey = null;    // shift-range anchor
+  let focusedChecklistId = null;    // null = "All checklists" tab
+  let filters = { search: "", status: "all", category: "all" };
+  let currentVisibleRows = [];      // the rule list's current filtered/ordered rows
+  const SUPPORTS_FS_ACCESS = "showOpenFilePicker" in window;
+
+  const $ = (id) => document.getElementById(id);
+
+  function escapeHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s == null ? "" : String(s);
+    return d.innerHTML;
+  }
+
+  function fallbackUuid() {
+    return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+  }
+  function newId() {
+    return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : fallbackUuid();
+  }
+
+  function toast(msg) {
+    const wrap = $("toastWrap");
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.textContent = msg;
+    wrap.appendChild(el);
+    setTimeout(() => el.remove(), 6000);
+  }
+
+  // ===================================================================
+  // CKLB helpers — read defensively (schema varies slightly across STIG
+  // Viewer versions), mutate in place, and never drop unknown fields.
+  // ===================================================================
+  function validateCklb(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) return "File root is not a JSON object.";
+    if (!Array.isArray(data.stigs)) return "Missing 'stigs' array — this doesn't look like a .cklb checklist.";
+    return null;
+  }
+
+  function getAssetName(data) {
+    const t = data && data.target_data;
+    if (t && (t.host_name || t.fqdn)) return t.host_name || t.fqdn;
+    return data.title || "Unnamed asset";
+  }
+
+  function getStigName(stig) {
+    return stig.display_name || stig.stig_name || stig.stig_id || "STIG";
+  }
+
+  function getStigVersionLine(stig) {
+    const parts = [];
+    if (stig.version) parts.push(`Version: ${stig.version}`);
+    if (stig.release_info) parts.push(stig.release_info);
+    else if (stig.release) parts.push(`Release: ${stig.release}`);
+    if (stig.benchmark_date && !parts.some(p => String(p).includes(stig.benchmark_date))) {
+      parts.push(`Benchmark Date: ${stig.benchmark_date}`);
+    }
+    return parts.join("  ");
+  }
+
+  function getDiscussion(rule) {
+    return rule.discussion || rule.vuln_discuss || rule.vulnerability_discussion || "";
+  }
+
+  function getCciEntries(rule) {
+    const refs = rule.cci_ref || rule.ccis || rule.cciRef;
+    if (!Array.isArray(refs)) return [];
+    return refs.map(c => {
+      if (typeof c === "string") return { id: c, definition: null, nist: [] };
+      return {
+        id: c.cci || c.id || "CCI",
+        definition: c.definition || c.description || null,
+        nist: Array.isArray(c.nist_controls) ? c.nist_controls : (Array.isArray(c.nist) ? c.nist : [])
+      };
+    });
+  }
+
+  function severityKind(sev) {
+    const s = (sev || "").toLowerCase();
+    if (s === "high" || s === "cat_i" || s === "cat i") return "high";
+    if (s === "medium" || s === "cat_ii" || s === "cat ii") return "medium";
+    if (s === "low" || s === "cat_iii" || s === "cat iii") return "low";
+    return s || "medium";
+  }
+  function severityLabel(sev) {
+    const k = severityKind(sev);
+    return { high: "CAT I", medium: "CAT II", low: "CAT III" }[k] || (sev || "—");
+  }
+  const SEVERITY_COLOR = { high: "var(--open)", medium: "#d29922", low: "#7aa2f7" };
+
+  function statusKind(status) {
+    const s = (status || "not_reviewed").toLowerCase();
+    if (["open", "not_a_finding", "not_applicable", "not_reviewed"].includes(s)) return s;
+    return "not_reviewed";
+  }
+  const STATUS_LABEL = {
+    open: "Open",
+    not_a_finding: "Not a Finding",
+    not_applicable: "Not Applicable",
+    not_reviewed: "Not Reviewed"
+  };
+  // Click-to-cycle order, matching STIG Viewer 3.
+  const STATUS_CYCLE = ["not_reviewed", "not_a_finding", "open", "not_applicable"];
+
+  // Small status glyphs matching STIG Viewer 3's iconography: an empty ring
+  // for Not Reviewed, a slashed ring for Not Applicable, a filled red "!"
+  // for Open, and a filled green check for Not a Finding.
+  function statusIconSvg(kind, size) {
+    size = size || 20;
+    const head = `width="${size}" height="${size}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"`;
+    switch (kind) {
+      case "open":
+        return `<svg ${head}><circle cx="12" cy="12" r="10" fill="var(--open)"/><rect x="10.8" y="5.8" width="2.4" height="8.2" rx="1.2" fill="#fff"/><circle cx="12" cy="17.2" r="1.4" fill="#fff"/></svg>`;
+      case "not_a_finding":
+        return `<svg ${head}><circle cx="12" cy="12" r="10" fill="var(--ok)"/><path d="M7.4 12.6l3 3 6.2-6.7" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      case "not_applicable":
+        return `<svg ${head}><circle cx="12" cy="12" r="9" fill="none" stroke="var(--na)" stroke-width="2.4"/><line x1="6.2" y1="17.8" x2="17.8" y2="6.2" stroke="var(--na)" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+      default:
+        return `<svg ${head}><circle cx="12" cy="12" r="9" fill="none" stroke="var(--na)" stroke-width="2.4"/></svg>`;
+    }
+  }
+
+  function cycleStatus(key) {
+    const row = findRowByKey(key);
+    if (!row) return;
+    const idx = STATUS_CYCLE.indexOf(statusKind(row.rule.status));
+    row.rule.status = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+    row.checklist.dirty = true;
+    renderAll();
+  }
+
+  function sanitizeFilename(name) {
+    const cleaned = String(name || "")
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
+      .replace(/[. ]+$/, "")
+      .trim();
+    return cleaned || "checklist";
+  }
+
+  // ===================================================================
+  // Loading files
+  // ===================================================================
+  async function ingestChecklistText(fileName, text, handle) {
+    const data = JSON.parse(text);
+    const err = validateCklb(data);
+    if (err) throw new Error(err);
+    const cl = { id: newId(), fileName, data, included: true, dirty: false, handle: handle || null };
+    checklists.push(cl);
+    return cl;
+  }
+
+  async function loadFiles(files, handles) {
+    const list = Array.from(files || []);
+    if (!list.length) return;
+    let loaded = 0, failed = 0;
+    const newlyLoadedIds = [];
+
+    for (let i = 0; i < list.length; i++) {
+      const file = list[i];
+      try {
+        const text = await file.text();
+        const cl = await ingestChecklistText(file.name, text, handles ? handles[i] : null);
+        newlyLoadedIds.push(cl.id);
+        loaded++;
+      } catch (e) {
+        failed++;
+        toast(`Couldn't load "${file.name}": ${e.message}`);
+      }
+    }
+
+    if (newlyLoadedIds.length === 1) focusedChecklistId = newlyLoadedIds[0];
+    else if (newlyLoadedIds.length > 1) focusedChecklistId = null;
+    renderAll();
+    if (loaded) toast(`Loaded ${loaded} checklist${loaded === 1 ? "" : "s"}.` + (failed ? ` ${failed} failed.` : ""));
+  }
+
+  const PICKER_TYPES = [{ description: "STIG Checklist", accept: { "application/json": [".cklb", ".json"] } }];
+
+  async function openPicker() {
+    try {
+      const handles = await window.showOpenFilePicker({ multiple: true, types: PICKER_TYPES, excludeAcceptAllOption: false });
+      const files = await Promise.all(handles.map(h => h.getFile()));
+      await loadFiles(files, handles);
+    } catch (e) {
+      if (e.name !== "AbortError") toast("Couldn't open file picker: " + e.message);
+    }
+  }
+
+  function triggerLoad() {
+    if (SUPPORTS_FS_ACCESS) openPicker(); else $("fileInput").click();
+  }
+
+  $("dropzone").addEventListener("click", triggerLoad);
+  $("importBtn").addEventListener("click", triggerLoad);
+  $("fileInput").addEventListener("change", (e) => { loadFiles(e.target.files, null); e.target.value = ""; });
+
+  async function handleDrop(e) {
+    e.preventDefault();
+    $("dropzone").classList.remove("drag");
+    const items = e.dataTransfer.items;
+    if (SUPPORTS_FS_ACCESS && items && items.length && typeof items[0].getAsFileSystemHandle === "function") {
+      const handles = [];
+      for (const item of items) {
+        if (item.kind !== "file") continue;
+        try {
+          const h = await item.getAsFileSystemHandle();
+          if (h && h.kind === "file") handles.push(h);
+        } catch (_) { /* dismissed or not a real file - skip it */ }
+      }
+      const files = await Promise.all(handles.map(h => h.getFile()));
+      await loadFiles(files, handles);
+    } else {
+      await loadFiles(e.dataTransfer.files, null);
+    }
+  }
+
+  const dz = $("dropzone");
+  ["dragenter", "dragover"].forEach(evt => dz.addEventListener(evt, (e) => { e.preventDefault(); dz.classList.add("drag"); }));
+  dz.addEventListener("dragleave", (e) => { e.preventDefault(); dz.classList.remove("drag"); });
+  // A single document-level drop zone (not just the empty-state box) so
+  // dropping more files in still works once checklists are already loaded
+  // and the big dropzone box is no longer shown.
+  document.addEventListener("dragover", (e) => e.preventDefault());
+  document.addEventListener("drop", handleDrop);
+
+  // ===================================================================
+  // Row model
+  // ===================================================================
+  function rowKey(checklistId, stigIdx, ruleIdx) {
+    return `${checklistId}::${stigIdx}::${ruleIdx}`;
+  }
+
+  function getAllRows() {
+    const rows = [];
+    checklists.forEach(cl => {
+      (cl.data.stigs || []).forEach((stig, si) => {
+        (stig.rules || []).forEach((rule, ri) => {
+          rows.push({ key: rowKey(cl.id, si, ri), checklist: cl, stigIdx: si, ruleIdx: ri, stig, rule });
+        });
+      });
+    });
+    return rows;
+  }
+
+  function applyFilters(rows) {
+    // Multiple Vuln IDs / terms can be searched at once, separated by
+    // commas and/or whitespace (e.g. "V-220601, V-220609 V-220620") — a row
+    // matches if it matches ANY one of the terms.
+    const terms = filters.search.toLowerCase().split(/[,\s]+/).map(t => t.trim()).filter(Boolean);
+    return rows.filter(r => {
+      const rule = r.rule;
+      if (focusedChecklistId) {
+        if (r.checklist.id !== focusedChecklistId) return false;
+      } else if (!r.checklist.included) {
+        return false;
+      }
+      if (filters.status !== "all" && statusKind(rule.status) !== filters.status) return false;
+      if (filters.category !== "all" && severityKind(rule.severity) !== filters.category) return false;
+      if (terms.length) {
+        const hay = [rule.group_id, rule.rule_id, rule.rule_version, rule.rule_title].filter(Boolean).join(" ").toLowerCase();
+        if (!terms.some(term => hay.includes(term))) return false;
+      }
+      return true;
+    });
+  }
+
+  function findRowByKey(key) {
+    return getAllRows().find(r => r.key === key);
+  }
+
+  function computeCounts(rows) {
+    const c = { open: 0, not_a_finding: 0, not_reviewed: 0, not_applicable: 0, total: rows.length };
+    rows.forEach(r => c[statusKind(r.rule.status)]++);
+    return c;
+  }
+
+  // ===================================================================
+  // Top-level render
+  // ===================================================================
+  function renderAll() {
+    const hasAny = checklists.length > 0;
+    $("emptyHint").classList.toggle("hidden", hasAny);
+    $("tabBar").classList.toggle("hidden", !hasAny);
+    $("toolbar").classList.toggle("hidden", !hasAny);
+    $("ruleListColWrap").classList.toggle("hidden", !hasAny);
+    $("detailCol").classList.toggle("hidden", !hasAny);
+    $("sideCol").classList.toggle("hidden", !hasAny);
+    $("bottomBar").classList.toggle("hidden", !hasAny);
+    $("saveAllBtn").disabled = !hasAny;
+
+    renderTabs();
+    renderRuleList();
+    renderDetail();
+    renderSidePanel();
+    renderGlobalStats();
+  }
+
+  function renderGlobalStats() {
+    const rows = getAllRows();
+    const c = computeCounts(rows);
+    const el = $("globalStats");
+    if (!checklists.length) { el.innerHTML = ""; return; }
+    el.innerHTML = `
+      <span>${checklists.length} checklist${checklists.length === 1 ? "" : "s"} · ${c.total} rules</span>
+      <span class="gs-open"><b>${c.open}</b> Open</span>
+      <span class="gs-naf"><b>${c.not_a_finding}</b> NAF</span>
+      <span class="gs-nr"><b>${c.not_reviewed}</b> Not Rev.</span>
+      <span class="gs-na"><b>${c.not_applicable}</b> N/A</span>
+    `;
+  }
+
+  function renderTabs() {
+    const bar = $("tabBar");
+    if (!checklists.length) { bar.innerHTML = ""; return; }
+
+    const allRows = getAllRows().filter(r => r.checklist.included);
+    const allCounts = computeCounts(allRows);
+
+    const tabsHtml = [`
+      <button class="tab ${focusedChecklistId === null ? "active" : ""}" data-tab="__all__">
+        All checklists
+        ${allCounts.open ? `<span class="tab-badge tab-badge-open">${allCounts.open}</span>` : ""}
+      </button>
+    `];
+
+    checklists.forEach(cl => {
+      const rows = [];
+      (cl.data.stigs || []).forEach(stig => (stig.rules || []).forEach(rule => rows.push({ rule })));
+      const c = computeCounts(rows);
+      const label = cl.fileName.replace(/\.cklb$/i, "");
+      tabsHtml.push(`
+        <button class="tab ${focusedChecklistId === cl.id ? "active" : ""}" data-tab="${cl.id}" title="${escapeHtml(getAssetName(cl.data))}">
+          ${escapeHtml(label)}${cl.dirty ? '<span class="dirty-dot" title="Unsaved changes">●</span>' : ""}
+          ${c.open ? `<span class="tab-badge tab-badge-open">${c.open}</span>` : ""}
+          <span class="tab-close" data-close="${cl.id}" title="Remove checklist">&times;</span>
+        </button>
+      `);
+    });
+
+    bar.innerHTML = tabsHtml.join("") + `<button class="tab-add" id="tabAddBtn" title="Load more checklists">+</button>`;
+
+    bar.querySelectorAll(".tab").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        if (e.target.classList.contains("tab-close")) return;
+        const id = btn.dataset.tab;
+        focusedChecklistId = (id === "__all__") ? null : id;
+        selectedKeys.clear();
+        renderAll();
+      });
+    });
+    bar.querySelectorAll(".tab-close").forEach(x => {
+      x.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = x.dataset.close;
+        const cl = checklists.find(c => c.id === id);
+        if (!cl) return;
+        if (cl.dirty && !confirm(`"${cl.fileName}" has unsaved changes. Remove it anyway?`)) return;
+        checklists = checklists.filter(c => c.id !== id);
+        if (focusedChecklistId === id) focusedChecklistId = null;
+        renderAll();
+      });
+    });
+    const addBtn = $("tabAddBtn");
+    if (addBtn) addBtn.addEventListener("click", triggerLoad);
+  }
+
+  // ===================================================================
+  // Rule list (left column)
+  // ===================================================================
+  function renderRuleList() {
+    const listEl = $("ruleList");
+    const allRows = getAllRows();
+    const visible = applyFilters(allRows);
+    currentVisibleRows = visible;
+
+    $("resultCount").textContent = `${visible.length} of ${allRows.length} rules`;
+    $("ruleListCount").textContent = visible.length;
+
+    // Keep the active rule valid for whatever's currently visible; default
+    // to the first visible row, like STIG Viewer selecting the top rule.
+    if (!visible.some(r => r.key === activeRuleKey)) {
+      activeRuleKey = visible.length ? visible[0].key : null;
+    }
+
+    if (!visible.length) {
+      listEl.innerHTML = `<div class="rule-list-empty">No rules match the current filters.</div>`;
+      renderBulkBar();
+      return;
+    }
+
+    const showAsset = focusedChecklistId === null;
+    listEl.innerHTML = visible.map(r => {
+      const rule = r.rule;
+      const sk = statusKind(rule.status);
+      const cls = ["rule-item"];
+      if (r.key === activeRuleKey) cls.push("active");
+      if (selectedKeys.has(r.key) && r.key !== activeRuleKey) cls.push("multiselected");
+      return `
+        <div class="${cls.join(" ")}" data-key="${r.key}">
+          <button class="status-icon-btn" data-key="${r.key}" title="${STATUS_LABEL[sk]} — click to change">${statusIconSvg(sk, 20)}</button>
+          <div style="min-width:0; flex:1;">
+            <div class="ri-vid">${escapeHtml(rule.group_id || rule.rule_id || "")}</div>
+            <div class="ri-title">${escapeHtml(rule.rule_title || "")}</div>
+            ${showAsset ? `<div class="ri-asset">${escapeHtml(getAssetName(r.checklist.data))}</div>` : ""}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    listEl.querySelectorAll(".rule-item").forEach(item => {
+      item.addEventListener("click", (e) => {
+        if (e.target.closest(".status-icon-btn")) return;
+        handleRowClick(item.dataset.key, e);
+      });
+    });
+    listEl.querySelectorAll(".status-icon-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        cycleStatus(btn.dataset.key);
+      });
+    });
+
+    renderBulkBar();
+  }
+
+  // File-manager-style multi-select: plain click selects just this row (and
+  // shows it in the detail panes); Ctrl/Cmd+click toggles a row in or out of
+  // the selection; Shift+click selects the contiguous range from the last
+  // clicked row to this one.
+  function handleRowClick(key, e) {
+    if (e.shiftKey && selectionAnchorKey) {
+      const keys = currentVisibleRows.map(r => r.key);
+      const a = keys.indexOf(selectionAnchorKey);
+      const b = keys.indexOf(key);
+      if (a !== -1 && b !== -1) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        selectedKeys = new Set(keys.slice(lo, hi + 1));
+        activeRuleKey = key;
+        renderRuleList();
+        renderDetail();
+        renderSidePanel();
+        return;
+      }
+    }
+    if (e.ctrlKey || e.metaKey) {
+      if (selectedKeys.has(key)) selectedKeys.delete(key); else selectedKeys.add(key);
+      selectionAnchorKey = key;
+      activeRuleKey = key;
+      renderRuleList();
+      renderDetail();
+      renderSidePanel();
+      return;
+    }
+    selectedKeys = new Set([key]);
+    selectionAnchorKey = key;
+    activeRuleKey = key;
+    renderRuleList();
+    renderDetail();
+    renderSidePanel();
+  }
+
+  function renderBulkBar() {
+    const bar = $("bulkBar");
+    if (selectedKeys.size < 2) { bar.classList.add("hidden"); return; }
+    bar.classList.remove("hidden");
+    $("selCount").textContent = selectedKeys.size;
+  }
+
+  $("clearSelectionBtn").addEventListener("click", () => {
+    selectedKeys = activeRuleKey ? new Set([activeRuleKey]) : new Set();
+    renderRuleList();
+  });
+  $("selectAllVisibleBtn").addEventListener("click", () => {
+    currentVisibleRows.forEach(r => selectedKeys.add(r.key));
+    renderRuleList();
+  });
+
+  $("bulkApplyStatusBtn").addEventListener("click", () => {
+    const status = $("bulkStatus").value;
+    if (!status) { toast("Choose a status to apply first."); return; }
+    let n = 0;
+    selectedKeys.forEach(key => {
+      const row = findRowByKey(key);
+      if (!row) return;
+      row.rule.status = status;
+      row.checklist.dirty = true;
+      n++;
+    });
+    toast(`Set status to "${STATUS_LABEL[status]}" on ${n} rule${n === 1 ? "" : "s"}.`);
+    renderAll();
+  });
+
+  const BULK_FIELD_LABEL = { comments: "comments", finding_details: "finding details" };
+
+  function applyBulkText(field, textInputId, mode) {
+    const text = $(textInputId).value;
+    const label = BULK_FIELD_LABEL[field] || field;
+
+    if (mode === "append" && !text.trim()) { toast(`Enter text to append to ${label} first.`); return; }
+    if (mode === "replace") {
+      const ok = confirm(`Replace ${label} on ${selectedKeys.size} selected rule${selectedKeys.size === 1 ? "" : "s"}? This overwrites whatever is already there.`);
+      if (!ok) return;
+    }
+
+    let n = 0;
+    selectedKeys.forEach(key => {
+      const row = findRowByKey(key);
+      if (!row) return;
+      if (mode === "append") {
+        row.rule[field] = row.rule[field] ? row.rule[field] + " | " + text : text;
+      } else {
+        row.rule[field] = text;
+      }
+      row.checklist.dirty = true;
+      n++;
+    });
+
+    if (mode === "append") $(textInputId).value = "";
+    toast(`${mode === "append" ? "Appended to" : "Replaced"} ${label} on ${n} rule${n === 1 ? "" : "s"}.`);
+    renderAll();
+  }
+
+  $("bulkCommentsAppendBtn").addEventListener("click", () => applyBulkText("comments", "bulkCommentsText", "append"));
+  $("bulkCommentsReplaceBtn").addEventListener("click", () => applyBulkText("comments", "bulkCommentsText", "replace"));
+  $("bulkFindingAppendBtn").addEventListener("click", () => applyBulkText("finding_details", "bulkFindingText", "append"));
+  $("bulkFindingReplaceBtn").addEventListener("click", () => applyBulkText("finding_details", "bulkFindingText", "replace"));
+
+  // ===================================================================
+  // Filters toolbar
+  // ===================================================================
+  let searchDebounce = null;
+  $("searchInput").addEventListener("input", (e) => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => { filters.search = e.target.value; renderRuleList(); }, 120);
+  });
+  $("statusFilter").addEventListener("change", (e) => { filters.status = e.target.value; renderRuleList(); });
+  $("catTabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-cat]");
+    if (!btn) return;
+    filters.category = btn.dataset.cat;
+    $("catTabs").querySelectorAll("button").forEach(b => b.classList.toggle("active", b === btn));
+    renderRuleList();
+  });
+
+  // ===================================================================
+  // Detail pane (center column) — always visible, no drawer/popup.
+  // ===================================================================
+  function renderDetail() {
+    const empty = $("detailEmpty");
+    const content = $("detailContent");
+    const row = activeRuleKey ? findRowByKey(activeRuleKey) : null;
+
+    if (!row) {
+      empty.classList.remove("hidden");
+      content.classList.add("hidden");
+      $("dComments").value = "";
+      $("dFindingDetails").value = "";
+      $("dComments").disabled = true;
+      $("dFindingDetails").disabled = true;
+      return;
+    }
+    empty.classList.add("hidden");
+    content.classList.remove("hidden");
+
+    const rule = row.rule;
+    $("dStigName").textContent = getStigName(row.stig);
+    $("dStigVersion").textContent = getStigVersionLine(row.stig);
+
+    $("mGroupId").textContent = rule.group_id || "—";
+    $("mRuleId").textContent = rule.rule_id || "—";
+    $("mStigId").textContent = rule.rule_version || "—";
+    $("mSrgId").textContent = rule.srg_id || rule.srgId || "—";
+    const sk = severityKind(rule.severity);
+    $("mSeverity").innerHTML = `<span class="sev-pill" style="color:${SEVERITY_COLOR[sk] || "inherit"}">${severityLabel(rule.severity)}</span>`;
+    const legacy = rule.legacy_ids || rule.legacyIds;
+    $("mLegacy").textContent = Array.isArray(legacy) && legacy.length ? legacy.join(", ") : "—";
+    $("mClass").textContent = rule.classification || "—";
+
+    $("dRuleTitle").textContent = rule.rule_title || "—";
+    $("dDiscussion").textContent = getDiscussion(rule) || "—";
+    $("dCheck").textContent = rule.check_content || "—";
+    $("dFix").textContent = rule.fix_text || "—";
+
+    const ccis = getCciEntries(rule);
+    $("refsWrap").classList.toggle("hidden", ccis.length === 0);
+    $("dCciList").innerHTML = ccis.map(c => `
+      <div class="cci-box">
+        <div class="cci-head">${escapeHtml(c.id)}</div>
+        <div class="cci-body">
+          ${c.definition ? escapeHtml(c.definition) : '<span class="no-data">No definition included in this checklist file.</span>'}
+          ${c.nist.length ? `<ul>${c.nist.map(n => `<li>${escapeHtml(n)}</li>`).join("")}</ul>` : ""}
+        </div>
+      </div>
+    `).join("");
+
+    $("dComments").disabled = false;
+    $("dFindingDetails").disabled = false;
+    $("dComments").value = rule.comments || "";
+    $("dFindingDetails").value = rule.finding_details || "";
+  }
+
+  $("dComments").addEventListener("input", (e) => {
+    const row = activeRuleKey ? findRowByKey(activeRuleKey) : null;
+    if (!row) return;
+    row.rule.comments = e.target.value;
+    row.checklist.dirty = true;
+  });
+  $("dFindingDetails").addEventListener("input", (e) => {
+    const row = activeRuleKey ? findRowByKey(activeRuleKey) : null;
+    if (!row) return;
+    row.rule.finding_details = e.target.value;
+    row.checklist.dirty = true;
+  });
+  ["dComments", "dFindingDetails"].forEach(id => {
+    $(id).addEventListener("blur", () => { renderTabs(); });
+  });
+
+  // ===================================================================
+  // Side panel (right column) — status donut + score + target data.
+  // For the "All checklists" tab there's no single target to edit, so it
+  // shows the combined donut/score only.
+  // ===================================================================
+  function donutSvg(counts, size) {
+    size = size || 150;
+    const r = size / 2 - 10;
+    const cx = size / 2, cy = size / 2;
+    const circumference = 2 * Math.PI * r;
+    const segments = [
+      { kind: "not_reviewed", color: "var(--na)" },
+      { kind: "not_a_finding", color: "var(--ok)" },
+      { kind: "open", color: "var(--open)" },
+      { kind: "not_applicable", color: "#4a5a6a" }
+    ];
+    let acc = 0;
+    const total = counts.total || 0;
+    const circles = segments.map(seg => {
+      const n = counts[seg.kind] || 0;
+      if (!n || !total) return "";
+      const frac = n / total;
+      const dash = frac * circumference;
+      const gap = circumference - dash;
+      const rotate = -90 + acc * 360;
+      acc += frac;
+      return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="14"
+                stroke-dasharray="${dash} ${gap}" transform="rotate(${rotate} ${cx} ${cy})"/>`;
+    }).join("");
+    const bg = total ? "" : `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="14"/>`;
+    return `
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        ${bg}${circles}
+        <text x="${cx}" y="${cy - 6}" text-anchor="middle" font-size="22" font-weight="700" fill="var(--text)">${total}</text>
+        <text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="11" fill="var(--dim)">Rules</text>
+      </svg>
+    `;
+  }
+
+  function renderSidePanel() {
+    const el = $("sideCol");
+    if (!checklists.length) { el.innerHTML = ""; return; }
+
+    let rows, cl;
+    if (focusedChecklistId) {
+      cl = checklists.find(c => c.id === focusedChecklistId);
+      rows = [];
+      if (cl) (cl.data.stigs || []).forEach(stig => (stig.rules || []).forEach(rule => rows.push({ rule })));
+    } else {
+      rows = getAllRows().filter(r => r.checklist.included);
+    }
+    const c = computeCounts(rows);
+    const score = c.total ? Math.round(((c.not_a_finding + c.not_applicable) / c.total) * 100) : 0;
+
+    let html = `
+      <div class="donut-wrap">${donutSvg(c, 150)}</div>
+      <div class="donut-legend">
+        <div class="leg-item"><span class="swatch" style="background:var(--na)"></span>Not Reviewed <span class="leg-n">${c.not_reviewed}</span></div>
+        <div class="leg-item"><span class="swatch" style="background:var(--ok)"></span>Not a Finding <span class="leg-n">${c.not_a_finding}</span></div>
+        <div class="leg-item"><span class="swatch" style="background:#4a5a6a"></span>Not Applicable <span class="leg-n">${c.not_applicable}</span></div>
+        <div class="leg-item"><span class="swatch" style="background:var(--open)"></span>Open <span class="leg-n">${c.open}</span></div>
+      </div>
+      <div class="score-row">
+        <div class="score-label"><span>Score</span><span>${score}%</span></div>
+        <div class="score-bar"><div style="width:${score}%"></div></div>
+        <div style="font-size:0.68rem; color:var(--dim); margin-top:0.3rem;">(Not a Finding + Not Applicable) ⁄ Total</div>
+      </div>
+    `;
+
+    if (cl) {
+      const t = cl.data.target_data || {};
+      html += `
+        <div class="field-group">
+          <label>Checklist Type</label>
+          <select id="tdType">
+            <option value="Computing" ${t.target_type !== "Non-Computing" ? "selected" : ""}>Computing</option>
+            <option value="Non-Computing" ${t.target_type === "Non-Computing" ? "selected" : ""}>Non-Computing</option>
+          </select>
+        </div>
+        <div class="field-group"><label>Host Name</label><input type="text" id="tdHost" value="${escapeHtml(t.host_name || "")}"></div>
+        <div class="field-group"><label>IP Address</label><input type="text" id="tdIp" value="${escapeHtml(t.ip_address || "")}"></div>
+        <div class="field-group"><label>MAC Address</label><input type="text" id="tdMac" value="${escapeHtml(t.mac_address || "")}"></div>
+        <div class="field-group"><label>Fully Qualified Domain Name</label><input type="text" id="tdFqdn" value="${escapeHtml(t.fqdn || "")}"></div>
+        <div class="field-group"><label>Target Comments</label><textarea id="tdComments">${escapeHtml(t.comments || "")}</textarea></div>
+        <div class="field-group"><label>Role</label><input type="text" id="tdRole" value="${escapeHtml(t.role || "")}" placeholder="None"></div>
+        <div class="field-group"><label>Technology Area</label><input type="text" id="tdTech" value="${escapeHtml(t.technology_area || "")}"></div>
+        <div class="checkbox-row"><input type="checkbox" id="tdWebDb" ${t.is_web_database ? "checked" : ""}><label for="tdWebDb" style="margin:0; text-transform:none; letter-spacing:normal; font-size:0.8rem; color:var(--text);">Web or Database STIG</label></div>
+      `;
+    } else {
+      html += `<div class="side-note">Open a specific checklist's tab to view or edit its target data.</div>`;
+    }
+
+    el.innerHTML = html;
+    if (!cl) return;
+
+    const bind = (id, field, checkbox) => {
+      const input = $(id);
+      if (!input) return;
+      input.addEventListener(checkbox ? "change" : "input", () => {
+        if (!cl.data.target_data) cl.data.target_data = {};
+        cl.data.target_data[field] = checkbox ? input.checked : input.value;
+        cl.dirty = true;
+        renderTabs();
+      });
+    };
+    bind("tdType", "target_type");
+    bind("tdHost", "host_name");
+    bind("tdIp", "ip_address");
+    bind("tdMac", "mac_address");
+    bind("tdFqdn", "fqdn");
+    bind("tdComments", "comments");
+    bind("tdRole", "role");
+    bind("tdTech", "technology_area");
+    bind("tdWebDb", "is_web_database", true);
+  }
+
+  // ===================================================================
+  // Export / Save — dependency-free ZIP writer (store/no-compression) so
+  // this stays a single offline HTML file with no CDN requirement.
+  // ===================================================================
+  const CRC_TABLE = (() => {
+    const table = [];
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+  function crc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function writeU32(arr, off, val) { arr[off]=val&255; arr[off+1]=(val>>>8)&255; arr[off+2]=(val>>>16)&255; arr[off+3]=(val>>>24)&255; }
+  function writeU16(arr, off, val) { arr[off]=val&255; arr[off+1]=(val>>>8)&255; }
+
+  function makeZip(files) {
+    const now = new Date();
+    const time = ((now.getHours() & 31) << 11) | ((now.getMinutes() & 63) << 5) | ((now.getSeconds() >> 1) & 31);
+    const dosDate = (((now.getFullYear() - 1980) & 127) << 9) | (((now.getMonth() + 1) & 15) << 5) | (now.getDate() & 31);
+    const localParts = [], centralParts = [];
+    let offset = 0;
+
+    files.forEach(f => {
+      const nameBytes = new TextEncoder().encode(f.name);
+      const data = f.data;
+      const crc = crc32(data);
+      const size = data.length;
+
+      const local = new Uint8Array(30 + nameBytes.length);
+      writeU32(local, 0, 0x04034b50);
+      writeU16(local, 4, 20);
+      writeU16(local, 6, 0);
+      writeU16(local, 8, 0);
+      writeU16(local, 10, time);
+      writeU16(local, 12, dosDate);
+      writeU32(local, 14, crc);
+      writeU32(local, 18, size);
+      writeU32(local, 22, size);
+      writeU16(local, 26, nameBytes.length);
+      writeU16(local, 28, 0);
+      local.set(nameBytes, 30);
+      localParts.push(local, data);
+
+      const central = new Uint8Array(46 + nameBytes.length);
+      writeU32(central, 0, 0x02014b50);
+      writeU16(central, 4, 20);
+      writeU16(central, 6, 20);
+      writeU16(central, 8, 0);
+      writeU16(central, 10, 0);
+      writeU16(central, 12, time);
+      writeU16(central, 14, dosDate);
+      writeU32(central, 16, crc);
+      writeU32(central, 20, size);
+      writeU32(central, 24, size);
+      writeU16(central, 28, nameBytes.length);
+      writeU32(central, 42, offset);
+      central.set(nameBytes, 46);
+      centralParts.push(central);
+
+      offset += local.length + data.length;
+    });
+
+    const centralSize = centralParts.reduce((a, b) => a + b.length, 0);
+    const centralOffset = offset;
+    const eocd = new Uint8Array(22);
+    writeU32(eocd, 0, 0x06054b50);
+    writeU16(eocd, 8, files.length);
+    writeU16(eocd, 10, files.length);
+    writeU32(eocd, 12, centralSize);
+    writeU32(eocd, 16, centralOffset);
+
+    const allParts = [...localParts, ...centralParts, eocd];
+    const total = allParts.reduce((a, b) => a + b.length, 0);
+    const out = new Uint8Array(total);
+    let pos = 0;
+    allParts.forEach(p => { out.set(p, pos); pos += p.length; });
+    return out;
+  }
+
+  function outputNameFor(cl) {
+    let name = cl.fileName;
+    if (!/\.cklb$/i.test(name)) name = sanitizeFilename(name) + ".cklb";
+    return name;
+  }
+
+  function downloadChecklist(cl) {
+    const json = JSON.stringify(cl.data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = outputNameFor(cl);
+    a.click();
+    URL.revokeObjectURL(a.href);
+    cl.dirty = false;
+    renderTabs();
+    toast(`Downloaded ${a.download}.`);
+  }
+
+  function downloadAsZip(list) {
+    const usedNames = new Map();
+    const files = list.map(cl => {
+      let base = outputNameFor(cl);
+      let name = base;
+      if (usedNames.has(base)) {
+        const n = usedNames.get(base) + 1;
+        usedNames.set(base, n);
+        name = base.replace(/\.cklb$/i, `_${n}.cklb`);
+      } else {
+        usedNames.set(base, 1);
+      }
+      const json = JSON.stringify(cl.data, null, 2);
+      return { name, data: new TextEncoder().encode(json) };
+    });
+    const zipBytes = makeZip(files);
+    const blob = new Blob([zipBytes], { type: "application/zip" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "checklists_edited.zip";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    list.forEach(cl => cl.dirty = false);
+    renderTabs();
+  }
+
+  async function verifyRWPermission(handle) {
+    const opts = { mode: "readwrite" };
+    if ((await handle.queryPermission(opts)) === "granted") return true;
+    if ((await handle.requestPermission(opts)) === "granted") return true;
+    return false;
+  }
+
+  async function saveChecklist(cl) {
+    if (!cl.handle) { downloadChecklist(cl); return; }
+    try {
+      const ok = await verifyRWPermission(cl.handle);
+      if (!ok) { toast(`Permission to save "${cl.fileName}" was denied — downloading instead.`); downloadChecklist(cl); return; }
+      const writable = await cl.handle.createWritable();
+      await writable.write(JSON.stringify(cl.data, null, 2));
+      await writable.close();
+      cl.dirty = false;
+      renderTabs();
+      toast(`Saved ${cl.fileName}.`);
+    } catch (e) {
+      toast(`Couldn't save "${cl.fileName}" directly (${e.message}) — downloading instead.`);
+      downloadChecklist(cl);
+    }
+  }
+
+  async function saveAll() {
+    if (!checklists.length) return;
+    const direct = checklists.filter(c => c.handle);
+    const noHandle = checklists.filter(c => !c.handle);
+    const failedDirect = [];
+    let savedCount = 0;
+
+    for (const cl of direct) {
+      try {
+        const ok = await verifyRWPermission(cl.handle);
+        if (!ok) { failedDirect.push(cl); continue; }
+        const writable = await cl.handle.createWritable();
+        await writable.write(JSON.stringify(cl.data, null, 2));
+        await writable.close();
+        cl.dirty = false;
+        savedCount++;
+      } catch (e) {
+        failedDirect.push(cl);
+      }
+    }
+
+    const toDownload = [...noHandle, ...failedDirect];
+    if (toDownload.length === 1) downloadChecklist(toDownload[0]);
+    else if (toDownload.length > 1) downloadAsZip(toDownload);
+
+    renderTabs();
+    const parts = [];
+    if (savedCount) parts.push(`saved ${savedCount} directly to disk`);
+    if (toDownload.length) parts.push(`downloaded ${toDownload.length} (no direct file access)`);
+    toast(parts.length ? parts.join(", ") + "." : "Nothing to save.");
+  }
+
+  $("saveAllBtn").addEventListener("click", saveAll);
+  $("saveBtn").addEventListener("click", () => {
+    if (focusedChecklistId) {
+      const cl = checklists.find(c => c.id === focusedChecklistId);
+      if (cl) saveChecklist(cl);
+    } else {
+      saveAll();
+    }
+  });
+  $("exportBtn").addEventListener("click", () => {
+    if (focusedChecklistId) {
+      const cl = checklists.find(c => c.id === focusedChecklistId);
+      if (cl) downloadChecklist(cl);
+    } else {
+      const included = checklists.filter(c => c.included);
+      if (included.length === 1) downloadChecklist(included[0]);
+      else if (included.length > 1) downloadAsZip(included);
+    }
+  });
+
+  // Warn before an accidental tab close if there are unsaved edits.
+  window.addEventListener("beforeunload", (e) => {
+    if (checklists.some(c => c.dirty)) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+
+  renderAll();
+
+  $("saveCapabilityNote") && ($("saveCapabilityNote").textContent = SUPPORTS_FS_ACCESS
+    ? "In this browser, checklists loaded via the picker or drag-and-drop can be saved straight back to their original file — no re-downloading."
+    : "This browser can't save directly back to a file, so Save will download a new (edited) copy instead.");
+})();
+</script>
+</body>
+</html>
