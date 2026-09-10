@@ -56,6 +56,26 @@
   .global-stats .gs-naf b { color: var(--ok); }
   .global-stats .gs-nr b { color: var(--accent); }
   .global-stats .gs-na b { color: var(--na); }
+  .save-status { font-size: 0.74rem; color: var(--dim); white-space: nowrap; }
+  .autosave-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--dim);
+    border-radius: 999px;
+    padding: 0.32rem 0.7rem;
+    font-size: 0.76rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .autosave-toggle:hover { border-color: var(--accent); }
+  .autosave-toggle b { color: var(--text); }
+  .autosave-toggle .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--na); flex-shrink: 0; }
+  .autosave-toggle.on .dot { background: var(--ok); }
+  .autosave-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
+  .autosave-toggle:disabled:hover { border-color: var(--border); }
 
   .btn {
     background: var(--panel);
@@ -347,6 +367,10 @@
   <span class="sub">not affiliated with DISA's STIG Viewer — styled to match it</span>
   <div class="spacer"></div>
   <div class="global-stats" id="globalStats"></div>
+  <span class="save-status" id="saveStatusText"></span>
+  <button class="autosave-toggle" id="autosaveToggle" title="">
+    <span class="dot" id="autosaveDot"></span> Auto-save: <b id="autosaveState">On</b>
+  </button>
   <button class="btn primary" id="saveAllBtn" disabled>Save All</button>
 </div>
 
@@ -478,6 +502,14 @@
   let currentVisibleRows = [];      // the rule list's current filtered/ordered rows
   const SUPPORTS_FS_ACCESS = "showOpenFilePicker" in window;
 
+  // Auto-save: only meaningful for checklists with a real FileSystemFileHandle
+  // (opened via the picker or drag-and-drop in Chrome/Edge) - there's no safe
+  // way to "auto-save" a checklist that only ever produces a browser download,
+  // so those always fall back to a manual Save/Export.
+  let autosaveEnabled = SUPPORTS_FS_ACCESS;
+  const AUTOSAVE_DELAY_MS = 1200;
+  const autosaveTimers = new Map(); // checklistId -> timeout id, so rapid edits debounce into one write
+
   const $ = (id) => document.getElementById(id);
 
   function escapeHtml(s) {
@@ -602,6 +634,7 @@
     row.rule.status = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
     row.checklist.dirty = true;
     renderAll();
+    scheduleAutosave(row.checklist);
   }
 
   function sanitizeFilename(name) {
@@ -624,6 +657,49 @@
     return cl;
   }
 
+  // Remembers the last folder used with the file picker across sessions.
+  // We can't just rely on showOpenFilePicker's built-in per-id memory (it
+  // doesn't reliably persist for a plain local HTML file across separate
+  // launches), so we stash the actual FileSystemFileHandle in IndexedDB and
+  // hand it back as "startIn" next time - that's enough to seed the
+  // picker's starting folder without needing any read/write permission on
+  // the handle itself.
+  const HANDLE_DB_NAME = "stig-editor-handles";
+  const HANDLE_STORE = "handles";
+  const LAST_HANDLE_KEY = "lastPickerHandle";
+
+  function openHandleDb() {
+    return new Promise((resolve, reject) => {
+      if (!("indexedDB" in window)) { reject(new Error("no indexedDB")); return; }
+      const req = indexedDB.open(HANDLE_DB_NAME, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore(HANDLE_STORE); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function saveLastHandle(handle) {
+    try {
+      const db = await openHandleDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(HANDLE_STORE, "readwrite");
+        tx.objectStore(HANDLE_STORE).put(handle, LAST_HANDLE_KEY);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (_) { /* best effort only - not fatal if this fails */ }
+  }
+  async function loadLastHandle() {
+    try {
+      const db = await openHandleDb();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(HANDLE_STORE, "readonly");
+        const req = tx.objectStore(HANDLE_STORE).get(LAST_HANDLE_KEY);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    } catch (_) { return null; }
+  }
+
   async function loadFiles(files, handles) {
     const list = Array.from(files || []);
     if (!list.length) return;
@@ -643,17 +719,48 @@
       }
     }
 
+    // Remember where this batch came from so the next picker opens there.
+    if (handles && handles.length) saveLastHandle(handles[handles.length - 1]);
+
     if (newlyLoadedIds.length === 1) focusedChecklistId = newlyLoadedIds[0];
     else if (newlyLoadedIds.length > 1) focusedChecklistId = null;
     renderAll();
     if (loaded) toast(`Loaded ${loaded} checklist${loaded === 1 ? "" : "s"}.` + (failed ? ` ${failed} failed.` : ""));
+
+    // Ask for write permission on every newly-loaded file right now, back
+    // to back, instead of waiting for autosave/Save to hit each one
+    // individually later. The browser still shows its own prompt per file
+    // (that part can't be skipped or bulk-approved - it's a deliberate
+    // security boundary), but this way it's one batch of clicks right after
+    // loading rather than repeated interruptions down the line.
+    if (newlyLoadedIds.length) preauthorizeWriteAccess(newlyLoadedIds);
+  }
+
+  async function preauthorizeWriteAccess(ids) {
+    const targets = checklists.filter(cl => ids.includes(cl.id) && cl.handle);
+    for (const cl of targets) {
+      try {
+        await verifyRWPermission(cl.handle);
+      } catch (_) {
+        // Not fatal - Save/auto-save will surface this again later if it's still a problem.
+      }
+    }
+    renderSaveStatus();
   }
 
   const PICKER_TYPES = [{ description: "STIG Checklist", accept: { "application/json": [".cklb", ".json"] } }];
 
   async function openPicker() {
     try {
-      const handles = await window.showOpenFilePicker({ multiple: true, types: PICKER_TYPES, excludeAcceptAllOption: false });
+      const opts = {
+        multiple: true,
+        types: PICKER_TYPES,
+        excludeAcceptAllOption: false,
+        id: "stig-cklb-picker"
+      };
+      const lastHandle = await loadLastHandle();
+      if (lastHandle) opts.startIn = lastHandle;
+      const handles = await window.showOpenFilePicker(opts);
       const files = await Promise.all(handles.map(h => h.getFile()));
       await loadFiles(files, handles);
     } catch (e) {
@@ -768,6 +875,7 @@
     renderDetail();
     renderSidePanel();
     renderGlobalStats();
+    renderSaveStatus();
   }
 
   function renderGlobalStats() {
@@ -954,15 +1062,18 @@
     const status = $("bulkStatus").value;
     if (!status) { toast("Choose a status to apply first."); return; }
     let n = 0;
+    const touched = new Set();
     selectedKeys.forEach(key => {
       const row = findRowByKey(key);
       if (!row) return;
       row.rule.status = status;
       row.checklist.dirty = true;
+      touched.add(row.checklist);
       n++;
     });
     toast(`Set status to "${STATUS_LABEL[status]}" on ${n} rule${n === 1 ? "" : "s"}.`);
     renderAll();
+    touched.forEach(scheduleAutosave);
   });
 
   const BULK_FIELD_LABEL = { comments: "comments", finding_details: "finding details" };
@@ -978,6 +1089,7 @@
     }
 
     let n = 0;
+    const touched = new Set();
     selectedKeys.forEach(key => {
       const row = findRowByKey(key);
       if (!row) return;
@@ -987,12 +1099,14 @@
         row.rule[field] = text;
       }
       row.checklist.dirty = true;
+      touched.add(row.checklist);
       n++;
     });
 
     if (mode === "append") $(textInputId).value = "";
     toast(`${mode === "append" ? "Appended to" : "Replaced"} ${label} on ${n} rule${n === 1 ? "" : "s"}.`);
     renderAll();
+    touched.forEach(scheduleAutosave);
   }
 
   $("bulkCommentsAppendBtn").addEventListener("click", () => applyBulkText("comments", "bulkCommentsText", "append"));
@@ -1079,12 +1193,14 @@
     if (!row) return;
     row.rule.comments = e.target.value;
     row.checklist.dirty = true;
+    scheduleAutosave(row.checklist);
   });
   $("dFindingDetails").addEventListener("input", (e) => {
     const row = activeRuleKey ? findRowByKey(activeRuleKey) : null;
     if (!row) return;
     row.rule.finding_details = e.target.value;
     row.checklist.dirty = true;
+    scheduleAutosave(row.checklist);
   });
   ["dComments", "dFindingDetails"].forEach(id => {
     $(id).addEventListener("blur", () => { renderTabs(); });
@@ -1193,6 +1309,7 @@
         cl.data.target_data[field] = checkbox ? input.checked : input.value;
         cl.dirty = true;
         renderTabs();
+        scheduleAutosave(cl);
       });
     };
     bind("tdType", "target_type");
@@ -1343,7 +1460,118 @@
     return false;
   }
 
+  // ---- Auto-save --------------------------------------------------------
+  // Debounced per checklist: rapid edits (typing, repeated status clicks)
+  // collapse into a single write AUTOSAVE_DELAY_MS after things go quiet.
+  // Deliberately only checks (never requests) permission, so a lapsed grant
+  // just leaves the checklist dirty for a manual Save rather than popping a
+  // permission dialog while someone's mid-keystroke.
+  const autosaveInFlight = new Set(); // checklist ids currently mid-write, to avoid overlapping writes to the same file
+
+  function scheduleAutosave(cl) {
+    if (!autosaveEnabled || !cl || !cl.handle) { renderSaveStatus(); return; }
+    if (autosaveTimers.has(cl.id)) clearTimeout(autosaveTimers.get(cl.id));
+    const t = setTimeout(() => runAutosave(cl), AUTOSAVE_DELAY_MS);
+    autosaveTimers.set(cl.id, t);
+    renderSaveStatus();
+  }
+
+  function cancelAutosave(cl) {
+    if (cl && autosaveTimers.has(cl.id)) {
+      clearTimeout(autosaveTimers.get(cl.id));
+      autosaveTimers.delete(cl.id);
+    }
+  }
+
+  function runAutosave(cl) {
+    autosaveTimers.delete(cl.id);
+    if (autosaveInFlight.has(cl.id)) {
+      // A write for this checklist is already in progress - don't overlap
+      // it with another; just try again shortly.
+      autosaveTimers.set(cl.id, setTimeout(() => runAutosave(cl), 400));
+      return;
+    }
+    performAutosave(cl);
+  }
+
+  async function performAutosave(cl) {
+    if (!cl.handle || !cl.dirty) { renderSaveStatus(); return; }
+    autosaveInFlight.add(cl.id);
+    renderSaveStatus();
+    try {
+      const granted = (await cl.handle.queryPermission({ mode: "readwrite" })) === "granted";
+      if (!granted) {
+        // Stays dirty; a manual Save will (re)request permission. Flag it
+        // so the status line says so instead of quietly claiming "saved".
+        if (!cl.autosaveFailed) { cl.autosaveFailed = true; toast(`Auto-save lost write permission for "${cl.fileName}" — click Save to reauthorize.`); }
+        return;
+      }
+      const writable = await cl.handle.createWritable();
+      await writable.write(JSON.stringify(cl.data, null, 2));
+      await writable.close();
+      cl.dirty = false;
+      cl.autosaveFailed = false;
+      renderTabs();
+    } catch (e) {
+      if (!cl.autosaveFailed) { cl.autosaveFailed = true; toast(`Auto-save failed for "${cl.fileName}" (${e.message}) — click Save to retry.`); }
+    } finally {
+      autosaveInFlight.delete(cl.id);
+      renderSaveStatus();
+    }
+  }
+
+  function renderSaveStatus() {
+    const toggle = $("autosaveToggle");
+    const statusEl = $("saveStatusText");
+    if (!SUPPORTS_FS_ACCESS) {
+      toggle.disabled = true;
+      toggle.title = "Auto-save needs direct file access (Chrome/Edge) - unavailable in this browser.";
+      toggle.classList.remove("on");
+      $("autosaveState").textContent = "Unavailable";
+      statusEl.textContent = "";
+      return;
+    }
+    toggle.disabled = false;
+    toggle.classList.toggle("on", autosaveEnabled);
+    $("autosaveState").textContent = autosaveEnabled ? "On" : "Off";
+    toggle.title = autosaveEnabled
+      ? "Auto-save is on - click to turn off"
+      : "Auto-save is off - click to turn on";
+
+    if (!checklists.length) { statusEl.textContent = ""; return; }
+
+    const dirtyNoHandle = checklists.filter(c => c.dirty && !c.handle).length;
+    const dirtyWithHandle = checklists.filter(c => c.dirty && c.handle).length;
+    const busy = autosaveTimers.size || autosaveInFlight.size;
+    const parts = [];
+    if (autosaveEnabled) {
+      if (busy) parts.push("Saving…");
+      else if (dirtyWithHandle) parts.push(`${dirtyWithHandle} failed to auto-save — click Save`);
+      else parts.push("All changes saved");
+    } else if (dirtyWithHandle) {
+      parts.push(`${dirtyWithHandle} unsaved`);
+    } else {
+      parts.push("All changes saved");
+    }
+    if (dirtyNoHandle) parts.push(`${dirtyNoHandle} need manual Save (no direct file access)`);
+    statusEl.textContent = parts.join(" · ");
+  }
+
+  $("autosaveToggle").addEventListener("click", () => {
+    if (!SUPPORTS_FS_ACCESS) return;
+    autosaveEnabled = !autosaveEnabled;
+    if (autosaveEnabled) {
+      // Catch up anything that was left dirty while auto-save was off.
+      checklists.filter(c => c.dirty && c.handle).forEach(performAutosave);
+    } else {
+      autosaveTimers.forEach(t => clearTimeout(t));
+      autosaveTimers.clear();
+    }
+    renderSaveStatus();
+  });
+
   async function saveChecklist(cl) {
+    cancelAutosave(cl);
     if (!cl.handle) { downloadChecklist(cl); return; }
     try {
       const ok = await verifyRWPermission(cl.handle);
@@ -1352,7 +1580,9 @@
       await writable.write(JSON.stringify(cl.data, null, 2));
       await writable.close();
       cl.dirty = false;
+      cl.autosaveFailed = false;
       renderTabs();
+      renderSaveStatus();
       toast(`Saved ${cl.fileName}.`);
     } catch (e) {
       toast(`Couldn't save "${cl.fileName}" directly (${e.message}) — downloading instead.`);
@@ -1362,6 +1592,7 @@
 
   async function saveAll() {
     if (!checklists.length) return;
+    checklists.forEach(cancelAutosave);
     const direct = checklists.filter(c => c.handle);
     const noHandle = checklists.filter(c => !c.handle);
     const failedDirect = [];
@@ -1375,6 +1606,7 @@
         await writable.write(JSON.stringify(cl.data, null, 2));
         await writable.close();
         cl.dirty = false;
+        cl.autosaveFailed = false;
         savedCount++;
       } catch (e) {
         failedDirect.push(cl);
@@ -1386,6 +1618,7 @@
     else if (toDownload.length > 1) downloadAsZip(toDownload);
 
     renderTabs();
+    renderSaveStatus();
     const parts = [];
     if (savedCount) parts.push(`saved ${savedCount} directly to disk`);
     if (toDownload.length) parts.push(`downloaded ${toDownload.length} (no direct file access)`);
